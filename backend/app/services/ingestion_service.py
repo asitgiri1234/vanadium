@@ -1,0 +1,107 @@
+"""Ingestion orchestration.
+
+Coordinates the full pipeline for both videos:
+
+    metadata → transcript → engagement → chunk → embed → index → compare
+
+Returns an :class:`AnalysisSnapshot` and persists it (plus the vectors) so the
+dashboard and RAG chat can use it. Each video is processed independently and
+defensively; a failure on one field never aborts the whole ingest.
+"""
+
+from __future__ import annotations
+
+import uuid
+
+from app.core.logging import get_logger
+from app.models.schemas import (
+    AnalysisSnapshot,
+    Platform,
+    TranscriptSegment,
+    VideoMetadata,
+    VideoSlot,
+)
+from app.services.chunking_service import chunking_service
+from app.services.comparison_service import comparison_service, compute_engagement_rate
+from app.services.embedding_service import embedding_service
+from app.services.metadata_service import metadata_service
+from app.services.transcript_service import transcript_service
+from app.store.analysis_store import analysis_store
+from app.utils.url_utils import detect_platform, is_supported
+from app.vectorstore.chroma_store import chroma_store
+
+logger = get_logger(__name__)
+
+
+class UnsupportedURLError(ValueError):
+    pass
+
+
+class IngestionService:
+    def ingest(self, video_a_url: str, video_b_url: str) -> AnalysisSnapshot:
+        for url in (video_a_url, video_b_url):
+            if not is_supported(url):
+                raise UnsupportedURLError(
+                    f"Unsupported or unrecognised URL: {url!r}. "
+                    "Only YouTube and Instagram Reels are supported."
+                )
+
+        analysis_id = uuid.uuid4().hex[:10]
+        logger.info("Starting ingest %s", analysis_id)
+
+        meta_a, segs_a = self._process_video(analysis_id, "A", video_a_url)
+        meta_b, segs_b = self._process_video(analysis_id, "B", video_b_url)
+
+        comparison = comparison_service.build_insights(meta_a, meta_b, segs_a, segs_b)
+
+        snapshot = AnalysisSnapshot(
+            analysis_id=analysis_id,
+            videos={"A": meta_a, "B": meta_b},
+            comparison=comparison,
+        )
+        analysis_store.save(snapshot)
+        logger.info("Ingest %s complete", analysis_id)
+        return snapshot
+
+    # ----------------------------------------------------------------- #
+    def _process_video(
+        self, analysis_id: str, slot: VideoSlot, url: str
+    ) -> tuple[VideoMetadata, list[TranscriptSegment]]:
+        platform = detect_platform(url)
+
+        raw = metadata_service.fetch(url)
+        segments = transcript_service.fetch(url, platform)
+
+        engagement = compute_engagement_rate(raw.likes, raw.comments, raw.views)
+
+        chunks = chunking_service.chunk(segments, analysis_id, slot, platform)
+        if chunks:
+            embeddings = embedding_service.embed_documents([c.text for c in chunks])
+            chroma_store.upsert_chunks(chunks, embeddings)
+
+        metadata = VideoMetadata(
+            video_id=slot,
+            platform=platform if platform != Platform.unknown else raw.platform,
+            url=url,
+            title=raw.title,
+            creator=raw.creator,
+            follower_count=raw.follower_count,
+            thumbnail=raw.thumbnail,
+            views=raw.views,
+            likes=raw.likes,
+            comments=raw.comments,
+            duration_seconds=raw.duration_seconds,
+            upload_date=raw.upload_date,
+            hashtags=raw.hashtags,
+            engagement_rate=engagement,
+            transcript_available=bool(segments),
+            chunk_count=len(chunks),
+        )
+        logger.info(
+            "Video %s (%s): %d chunks, engagement %.2f%%",
+            slot, platform.value, len(chunks), engagement,
+        )
+        return metadata, segments
+
+
+ingestion_service = IngestionService()

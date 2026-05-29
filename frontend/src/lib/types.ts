@@ -1,0 +1,53 @@
+export type VideoSlot = "A" | "B";
+export type Platform = "youtube" | "instagram" | "unknown";
+
+export interface VideoMetadata {
+  video_id: VideoSlot;
+  platform: Platform;
+  url: string;
+  title: string;
+  creator: string;
+  follower_count: number;
+  thumbnail: string | null;
+  views: number;
+  likes: number;
+  comments: number;
+  duration_seconds: number;
+  upload_date: string | null;
+  hashtags: string[];
+  engagement_rate: number;
+  transcript_available: boolean;
+  chunk_count: number;
+}
+
+export interface ComparisonInsights {
+  winner: VideoSlot | null;
+  engagement_delta: number;
+  headline_insights: string[];
+  hook_a: string;
+  hook_b: string;
+  cta_a: boolean;
+  cta_b: boolean;
+}
+
+export interface AnalysisSnapshot {
+  analysis_id: string;
+  videos: Record<VideoSlot, VideoMetadata>;
+  comparison: ComparisonInsights;
+}
+
+export interface Citation {
+  video_id: VideoSlot;
+  chunk_index: number;
+  timestamp: string;
+  source_platform: Platform;
+  snippet: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  citations?: Citation[];
+  streaming?: boolean;
+}

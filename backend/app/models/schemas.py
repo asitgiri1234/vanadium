@@ -1,0 +1,135 @@
+"""Pydantic models: API requests/responses and internal domain objects.
+
+These types are the single source of truth for data shapes shared across the
+ingestion, RAG, and API layers.
+"""
+
+from __future__ import annotations
+
+from enum import Enum
+from typing import Literal, Optional
+
+from pydantic import BaseModel, Field
+
+VideoSlot = Literal["A", "B"]
+
+
+class Platform(str, Enum):
+    youtube = "youtube"
+    instagram = "instagram"
+    unknown = "unknown"
+
+
+# --------------------------------------------------------------------------- #
+# Domain objects
+# --------------------------------------------------------------------------- #
+class VideoMetadata(BaseModel):
+    """Everything we know about a single video after ingestion."""
+
+    video_id: VideoSlot
+    platform: Platform
+    url: str
+
+    title: str = "Unknown title"
+    creator: str = "Unknown creator"
+    follower_count: int = 0
+
+    thumbnail: Optional[str] = None
+    views: int = 0
+    likes: int = 0
+    comments: int = 0
+    duration_seconds: int = 0
+    upload_date: Optional[str] = None  # ISO date string
+    hashtags: list[str] = Field(default_factory=list)
+
+    engagement_rate: float = 0.0
+    transcript_available: bool = False
+    chunk_count: int = 0
+
+
+class ChunkMetadata(BaseModel):
+    """Metadata attached to every transcript chunk in the vector store.
+
+    Matches the product-required shape exactly.
+    """
+
+    analysis_id: str
+    video_id: VideoSlot
+    chunk_index: int
+    timestamp: str  # e.g. "00:12-00:20"
+    source_platform: Platform
+
+
+class TranscriptSegment(BaseModel):
+    """A raw, time-coded transcript segment from an extractor."""
+
+    text: str
+    start: float  # seconds
+    duration: float  # seconds
+
+
+class TranscriptChunk(BaseModel):
+    """A cleaned, windowed chunk ready for embedding + indexing."""
+
+    id: str
+    text: str
+    metadata: ChunkMetadata
+
+
+class Citation(BaseModel):
+    """A structured source reference returned with a chat answer."""
+
+    video_id: VideoSlot
+    chunk_index: int
+    timestamp: str
+    source_platform: Platform
+    snippet: str = ""
+
+
+class ComparisonInsights(BaseModel):
+    """Strategist-grade comparison summary surfaced on the dashboard."""
+
+    winner: Optional[VideoSlot] = None
+    engagement_delta: float = 0.0
+    headline_insights: list[str] = Field(default_factory=list)
+    hook_a: str = ""
+    hook_b: str = ""
+    cta_a: bool = False
+    cta_b: bool = False
+
+
+class AnalysisSnapshot(BaseModel):
+    """The full result of an ingest, used by the dashboard and RAG context."""
+
+    analysis_id: str
+    videos: dict[VideoSlot, VideoMetadata]
+    comparison: ComparisonInsights
+
+
+# --------------------------------------------------------------------------- #
+# API requests / responses
+# --------------------------------------------------------------------------- #
+class IngestRequest(BaseModel):
+    video_a_url: str = Field(..., min_length=4)
+    video_b_url: str = Field(..., min_length=4)
+
+
+class HealthResponse(BaseModel):
+    status: str = "ok"
+    version: str
+    openai_configured: bool
+    whisper_enabled: bool
+
+
+class ChatRequest(BaseModel):
+    analysis_id: str
+    message: str = Field(..., min_length=1)
+
+
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ErrorResponse(BaseModel):
+    detail: str
