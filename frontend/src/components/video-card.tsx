@@ -3,6 +3,7 @@
 import { Calendar, Clock, Eye, Heart, MessageCircle, Users } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { thumbnailSrc } from "@/lib/api";
 import type { VideoMetadata } from "@/lib/types";
 import { formatNumber } from "@/lib/utils";
 
@@ -34,13 +35,15 @@ function Metric({
 }
 
 export function VideoCard({ video }: { video: VideoMetadata }) {
+  const thumb = thumbnailSrc(video.thumbnail, video.platform);
+  const viewsKnown = video.views > 0;
   return (
     <Card className="overflow-hidden ring-1 ring-border">
       <div className="relative aspect-video w-full bg-muted">
-        {video.thumbnail ? (
+        {thumb ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={video.thumbnail}
+            src={thumb}
             alt={video.title}
             className="h-full w-full object-cover"
           />
@@ -72,14 +75,21 @@ export function VideoCard({ video }: { video: VideoMetadata }) {
 
       <CardContent className="space-y-4">
         <div className="rounded-lg border border-border bg-muted/30 p-4 text-center">
-          <div className="text-3xl font-bold text-primary">{video.engagement_rate}%</div>
+          <div className="text-3xl font-bold text-primary">
+            {viewsKnown ? `${video.engagement_rate}%` : "N/A"}
+          </div>
           <div className="text-xs uppercase tracking-wide text-muted-foreground">
             Engagement rate
           </div>
+          {!viewsKnown && (
+            <div className="mt-1 text-[11px] text-[hsl(var(--warning))]">
+              View count not reported by {video.platform}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-3 gap-2">
-          <Metric icon={Eye} label="Views" value={formatNumber(video.views)} />
+          <Metric icon={Eye} label="Views" value={viewsKnown ? formatNumber(video.views) : "—"} />
           <Metric icon={Heart} label="Likes" value={formatNumber(video.likes)} />
           <Metric icon={MessageCircle} label="Comments" value={formatNumber(video.comments)} />
         </div>

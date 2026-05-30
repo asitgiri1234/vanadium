@@ -27,6 +27,21 @@ export async function getHealth(): Promise<HealthResponse> {
   return jsonOrThrow<HealthResponse>(await fetch(`${API_URL}/api/health`));
 }
 
+/**
+ * Resolve a displayable thumbnail src. Instagram CDN images are routed through
+ * the backend proxy because the CDN blocks direct hotlinking (needs a Referer).
+ */
+export function thumbnailSrc(
+  url: string | null,
+  platform: string,
+): string | null {
+  if (!url) return null;
+  if (platform === "instagram") {
+    return `${API_URL}/api/thumbnail?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
+
 export async function ingest(
   videoAUrl: string,
   videoBUrl: string,
