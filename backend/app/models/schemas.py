@@ -46,6 +46,26 @@ class VideoMetadata(BaseModel):
     transcript_available: bool = False
     chunk_count: int = 0
 
+    def to_card_text(self) -> str:
+        """Render an embeddable natural-language summary of this video's metadata.
+
+        This is the document stored (and embedded) as the video's metadata
+        record in the vector store, so questions like "who created Video B and
+        what is their follower count?" can retrieve it.
+        """
+        tags = ", ".join(self.hashtags) if self.hashtags else "none"
+        return (
+            f"Video {self.video_id} ({self.platform.value}). "
+            f"Title: {self.title}. "
+            f"Creator: {self.creator} with {self.follower_count:,} followers. "
+            f"Views: {self.views:,}. Likes: {self.likes:,}. "
+            f"Comments: {self.comments:,}. "
+            f"Engagement rate: {self.engagement_rate}%. "
+            f"Duration: {self.duration_seconds} seconds. "
+            f"Uploaded: {self.upload_date or 'unknown'}. "
+            f"Hashtags: {tags}."
+        )
+
 
 class ChunkMetadata(BaseModel):
     """Metadata attached to every transcript chunk in the vector store.

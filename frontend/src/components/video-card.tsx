@@ -1,15 +1,17 @@
 "use client";
 
-import { Eye, Heart, MessageCircle, Users, Trophy } from "lucide-react";
+import { Calendar, Clock, Eye, Heart, MessageCircle, Users } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { VideoMetadata, VideoSlot } from "@/lib/types";
-import { cn, formatNumber } from "@/lib/utils";
+import type { VideoMetadata } from "@/lib/types";
+import { formatNumber } from "@/lib/utils";
 
-const SLOT_ACCENT: Record<VideoSlot, string> = {
-  A: "from-sky-500/20 ring-sky-500/40",
-  B: "from-violet-500/20 ring-violet-500/40",
-};
+function formatDuration(seconds: number): string {
+  if (!seconds) return "—";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
 
 function Metric({
   icon: Icon,
@@ -31,15 +33,9 @@ function Metric({
   );
 }
 
-export function VideoCard({
-  video,
-  isWinner,
-}: {
-  video: VideoMetadata;
-  isWinner: boolean;
-}) {
+export function VideoCard({ video }: { video: VideoMetadata }) {
   return (
-    <Card className={cn("overflow-hidden ring-1 ring-border", isWinner && `ring-2 ${SLOT_ACCENT[video.video_id]}`)}>
+    <Card className="overflow-hidden ring-1 ring-border">
       <div className="relative aspect-video w-full bg-muted">
         {video.thumbnail ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -61,13 +57,6 @@ export function VideoCard({
             {video.platform}
           </Badge>
         </div>
-        {isWinner && (
-          <div className="absolute right-3 top-3">
-            <Badge variant="success" className="gap-1">
-              <Trophy className="h-3 w-3" /> Top performer
-            </Badge>
-          </div>
-        )}
       </div>
 
       <CardHeader className="pb-3">
@@ -83,9 +72,7 @@ export function VideoCard({
 
       <CardContent className="space-y-4">
         <div className="rounded-lg border border-border bg-muted/30 p-4 text-center">
-          <div className="text-3xl font-bold text-primary">
-            {video.engagement_rate}%
-          </div>
+          <div className="text-3xl font-bold text-primary">{video.engagement_rate}%</div>
           <div className="text-xs uppercase tracking-wide text-muted-foreground">
             Engagement rate
           </div>
@@ -97,20 +84,23 @@ export function VideoCard({
           <Metric icon={MessageCircle} label="Comments" value={formatNumber(video.comments)} />
         </div>
 
+        <div className="grid grid-cols-2 gap-2">
+          <Metric icon={Clock} label="Duration" value={formatDuration(video.duration_seconds)} />
+          <Metric
+            icon={Calendar}
+            label="Uploaded"
+            value={video.upload_date || "—"}
+          />
+        </div>
+
         {video.hashtags.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
-            {video.hashtags.slice(0, 8).map((tag) => (
+            {video.hashtags.slice(0, 10).map((tag) => (
               <Badge key={tag} variant="muted">
                 {tag}
               </Badge>
             ))}
           </div>
-        )}
-
-        {!video.transcript_available && (
-          <p className="text-xs text-[hsl(var(--warning))]">
-            No transcript available — analysis uses metadata only.
-          </p>
         )}
       </CardContent>
     </Card>

@@ -14,7 +14,13 @@ from typing import Any
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.models.schemas import Citation, Platform, TranscriptChunk, VideoSlot
+from app.models.schemas import (
+    Citation,
+    Platform,
+    TranscriptChunk,
+    VideoMetadata,
+    VideoSlot,
+)
 
 logger = get_logger(__name__)
 
@@ -52,6 +58,7 @@ class ChromaStore:
         documents = [c.text for c in chunks]
         metadatas: list[dict[str, Any]] = [
             {
+                "record_type": "transcript",
                 "analysis_id": c.metadata.analysis_id,
                 "video_id": c.metadata.video_id,
                 "chunk_index": c.metadata.chunk_index,
@@ -63,7 +70,70 @@ class ChromaStore:
         collection.upsert(
             ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas
         )
-        logger.info("Upserted %d chunks", len(chunks))
+        logger.info("Upserted %d transcript chunks", len(chunks))
+
+    def upsert_metadata(
+        self,
+        analysis_id: str,
+        videos: dict[VideoSlot, VideoMetadata],
+        embeddings: list[list[float]],
+    ) -> None:
+        """Store one metadata record per video in the same collection.
+
+        ``embeddings`` must align with ``videos`` ordered by slot (A then B).
+        The embeddable document is the video's metadata card; the raw numeric
+        fields are kept as scalar Chroma metadata (``record_type="metadata"``)
+        so they stay queryable.
+        """
+        if not videos:
+            return
+        slots = sorted(videos.keys())
+        collection = self._get_collection()
+        ids: list[str] = []
+        documents: list[str] = []
+        metadatas: list[dict[str, Any]] = []
+        for slot in slots:
+            v = videos[slot]
+            ids.append(f"{analysis_id}:{slot}:meta")
+            documents.append(v.to_card_text())
+            metadatas.append(
+                {
+                    "record_type": "metadata",
+                    "analysis_id": analysis_id,
+                    "video_id": slot,
+                    "source_platform": v.platform.value,
+                    "title": v.title,
+                    "creator": v.creator,
+                    "follower_count": v.follower_count,
+                    "views": v.views,
+                    "likes": v.likes,
+                    "comments": v.comments,
+                    "duration_seconds": v.duration_seconds,
+                    "upload_date": v.upload_date or "",
+                    "engagement_rate": v.engagement_rate,
+                    "hashtags": ", ".join(v.hashtags),
+                }
+            )
+        collection.upsert(
+            ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas
+        )
+        logger.info("Upserted %d metadata records", len(ids))
+
+    def get_metadata_records(self, analysis_id: str) -> list[dict[str, Any]]:
+        """Return the stored metadata records for an analysis (for inspection)."""
+        collection = self._get_collection()
+        result = collection.get(
+            where={
+                "$and": [
+                    {"analysis_id": analysis_id},
+                    {"record_type": "metadata"},
+                ]
+            },
+            include=["documents", "metadatas"],
+        )
+        docs = result.get("documents") or []
+        metas = result.get("metadatas") or []
+        return [{"document": d, "metadata": m} for d, m in zip(docs, metas)]
 
     def query(
         self,
@@ -75,14 +145,13 @@ class ChromaStore:
         """Return citations for the most relevant chunks within an analysis."""
         collection = self._get_collection()
 
-        where: dict[str, Any] = {"analysis_id": analysis_id}
+        conditions: list[dict[str, Any]] = [
+            {"analysis_id": analysis_id},
+            {"record_type": "transcript"},
+        ]
         if video_id is not None:
-            where = {
-                "$and": [
-                    {"analysis_id": analysis_id},
-                    {"video_id": video_id},
-                ]
-            }
+            conditions.append({"video_id": video_id})
+        where: dict[str, Any] = {"$and": conditions}
 
         result = collection.query(
             query_embeddings=[query_embedding],

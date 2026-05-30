@@ -52,11 +52,15 @@ class IngestionService:
         meta_a, segs_a = self._process_video(analysis_id, "A", video_a_url)
         meta_b, segs_b = self._process_video(analysis_id, "B", video_b_url)
 
+        # Persist both videos' metadata as retrievable records in the vector DB.
+        videos: dict[VideoSlot, VideoMetadata] = {"A": meta_a, "B": meta_b}
+        self._store_metadata(analysis_id, videos)
+
         comparison = comparison_service.build_insights(meta_a, meta_b, segs_a, segs_b)
 
         snapshot = AnalysisSnapshot(
             analysis_id=analysis_id,
-            videos={"A": meta_a, "B": meta_b},
+            videos=videos,
             comparison=comparison,
         )
         analysis_store.save(snapshot)
@@ -102,6 +106,15 @@ class IngestionService:
             slot, platform.value, len(chunks), engagement,
         )
         return metadata, segments
+
+    def _store_metadata(
+        self, analysis_id: str, videos: dict[VideoSlot, VideoMetadata]
+    ) -> None:
+        """Embed each video's metadata card and store it in the vector DB."""
+        slots = sorted(videos.keys())
+        cards = [videos[slot].to_card_text() for slot in slots]
+        embeddings = embedding_service.embed_documents(cards)
+        chroma_store.upsert_metadata(analysis_id, videos, embeddings)
 
 
 ingestion_service = IngestionService()
