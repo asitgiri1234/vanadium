@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     whisper_model: str = Field(default="base", alias="WHISPER_MODEL")
     enable_whisper: bool = Field(default=False, alias="ENABLE_WHISPER")
 
+    # Instagram authentication for yt-dlp (unlocks views/play counts + private
+    # data on the authenticated API path). Provide ONE of these:
+    #   - a Netscape-format cookies.txt exported from a logged-in session, OR
+    #   - a browser name to read cookies from (chrome|edge|firefox|brave|...).
+    instagram_cookies_file: str = Field(default="", alias="INSTAGRAM_COOKIES_FILE")
+    cookies_from_browser: str = Field(default="", alias="COOKIES_FROM_BROWSER")
+
     @property
     def openai_configured(self) -> bool:
         return bool(self.openai_api_key and self.openai_api_key.strip())

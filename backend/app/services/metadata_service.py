@@ -14,6 +14,7 @@ from app.core.logging import get_logger
 from app.models.schemas import Platform
 from app.utils.text import extract_hashtags
 from app.utils.url_utils import detect_platform
+from app.utils.ytdlp import apply_cookie_options
 
 logger = get_logger(__name__)
 
@@ -65,13 +66,15 @@ class MetadataService:
         # Imported lazily so the package isn't required just to import the app.
         from yt_dlp import YoutubeDL
 
-        opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "noplaylist": True,
-            "extract_flat": False,
-        }
+        opts = apply_cookie_options(
+            {
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+                "noplaylist": True,
+                "extract_flat": False,
+            }
+        )
         with YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
 

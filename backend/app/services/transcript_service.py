@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.schemas import Platform, TranscriptSegment
 from app.utils.url_utils import extract_youtube_id
+from app.utils.ytdlp import apply_cookie_options
 
 logger = get_logger(__name__)
 
@@ -103,13 +104,15 @@ class TranscriptService:
 
         tmp_dir = tempfile.mkdtemp(prefix="vanadium_")
         out_tmpl = os.path.join(tmp_dir, "audio.%(ext)s")
-        opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "format": "bestaudio/best",
-            "outtmpl": out_tmpl,
-            "noplaylist": True,
-        }
+        opts = apply_cookie_options(
+            {
+                "quiet": True,
+                "no_warnings": True,
+                "format": "bestaudio/best",
+                "outtmpl": out_tmpl,
+                "noplaylist": True,
+            }
+        )
         with YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
             path = ydl.prepare_filename(info)
