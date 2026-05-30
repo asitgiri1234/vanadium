@@ -33,13 +33,17 @@ class ChatService:
             yield {"type": "error", "detail": f"Unknown analysis_id: {analysis_id}"}
             return
 
-        citations = retriever.retrieve(message, analysis_id)
-        context = build_context(snapshot, citations)
-        user_prompt = build_user_prompt(context, message)
-        history = analysis_store.get_memory(analysis_id)
-
         answer_parts: list[str] = []
+        citations: list[Citation] = []
         try:
+            # Retrieval can fail (e.g. vector store unavailable); keep it inside
+            # the guard so it degrades to an error event instead of killing the
+            # SSE stream and showing a blank reply.
+            citations = retriever.retrieve(message, analysis_id)
+            context = build_context(snapshot, citations)
+            user_prompt = build_user_prompt(context, message)
+            history = analysis_store.get_memory(analysis_id)
+
             if settings.openai_configured:
                 async for token in self._stream_openai(user_prompt, history):
                     answer_parts.append(token)
