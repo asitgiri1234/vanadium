@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import uuid
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.schemas import (
     AnalysisSnapshot,
@@ -20,12 +21,14 @@ from app.models.schemas import (
     TranscriptSegment,
     VideoMetadata,
     VideoSlot,
+    VideoVisual,
 )
 from app.services.chunking_service import chunking_service
 from app.services.comparison_service import comparison_service, compute_engagement_rate
 from app.services.embedding_service import embedding_service
 from app.services.metadata_service import metadata_service
 from app.services.transcript_service import transcript_service
+from app.services.visual_service import visual_service
 from app.store.analysis_store import analysis_store
 from app.utils.url_utils import detect_platform, is_supported
 from app.vectorstore.chroma_store import chroma_store
@@ -49,8 +52,8 @@ class IngestionService:
         analysis_id = uuid.uuid4().hex[:10]
         logger.info("Starting ingest %s", analysis_id)
 
-        meta_a, segs_a = self._process_video(analysis_id, "A", video_a_url)
-        meta_b, segs_b = self._process_video(analysis_id, "B", video_b_url)
+        meta_a, segs_a, vis_a = self._process_video(analysis_id, "A", video_a_url)
+        meta_b, segs_b, vis_b = self._process_video(analysis_id, "B", video_b_url)
 
         # Persist both videos' metadata as retrievable records in the vector DB.
         videos: dict[VideoSlot, VideoMetadata] = {"A": meta_a, "B": meta_b}
@@ -58,6 +61,9 @@ class IngestionService:
 
         # Keep the raw transcript segments so the full transcript can be shown.
         analysis_store.save_transcripts(analysis_id, {"A": segs_a, "B": segs_b})
+
+        # Keep the per-video visual analysis (OCR + scene summary) for display.
+        analysis_store.save_visuals(analysis_id, {"A": vis_a, "B": vis_b})
 
         comparison = comparison_service.build_insights(meta_a, meta_b, segs_a, segs_b)
 
@@ -73,7 +79,7 @@ class IngestionService:
     # ----------------------------------------------------------------- #
     def _process_video(
         self, analysis_id: str, slot: VideoSlot, url: str
-    ) -> tuple[VideoMetadata, list[TranscriptSegment]]:
+    ) -> tuple[VideoMetadata, list[TranscriptSegment], VideoVisual]:
         platform = detect_platform(url)
 
         raw = metadata_service.fetch(url)
@@ -85,6 +91,8 @@ class IngestionService:
         if chunks:
             embeddings = embedding_service.embed_documents([c.text for c in chunks])
             chroma_store.upsert_chunks(chunks, embeddings)
+
+        visual = self._build_visual(analysis_id, slot, url, platform)
 
         metadata = VideoMetadata(
             video_id=slot,
@@ -108,7 +116,37 @@ class IngestionService:
             "Video %s (%s): %d chunks, engagement %.2f%%",
             slot, platform.value, len(chunks), engagement,
         )
-        return metadata, segments
+        return metadata, segments, visual
+
+    def _build_visual(
+        self, analysis_id: str, slot: VideoSlot, url: str, platform: Platform
+    ) -> VideoVisual:
+        """Run visual understanding (OCR + optional scene summary) for one video."""
+        if not settings.enable_visual:
+            return VideoVisual(video_id=slot, platform=platform, available=False)
+
+        frames, summary = visual_service.extract(url, platform)
+        available = bool(frames or summary)
+
+        if available:
+            parts: list[str] = []
+            if summary:
+                parts.append(f"Scene description: {summary}")
+            ocr_joined = " | ".join(f.ocr_text for f in frames if f.ocr_text)
+            if ocr_joined:
+                parts.append(f"On-screen text: {ocr_joined}")
+            text = "\n".join(parts)
+            if text.strip():
+                emb = embedding_service.embed_documents([text])[0]
+                chroma_store.upsert_visual(analysis_id, slot, platform, text, emb)
+
+        return VideoVisual(
+            video_id=slot,
+            platform=platform,
+            available=available,
+            frames=frames,
+            visual_summary=summary,
+        )
 
     def _store_metadata(
         self, analysis_id: str, videos: dict[VideoSlot, VideoMetadata]

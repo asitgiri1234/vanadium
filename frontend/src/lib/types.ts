@@ -63,6 +63,27 @@ export interface TranscriptResponse {
   transcripts: Record<VideoSlot, VideoTranscript>;
 }
 
+export interface VisualFrame {
+  start: number;
+  timestamp: string;
+  ocr_text: string;
+}
+
+export interface VideoVisual {
+  video_id: VideoSlot;
+  platform: Platform;
+  available: boolean;
+  frames: VisualFrame[];
+  visual_summary: string;
+}
+
+export interface VisualResponse {
+  analysis_id: string;
+  enabled: boolean;
+  vision_enabled: boolean;
+  visuals: Record<VideoSlot, VideoVisual>;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";

@@ -160,6 +160,27 @@ class TranscriptResponse(BaseModel):
     transcripts: dict[VideoSlot, VideoTranscript]
 
 
+class VisualFrame(BaseModel):
+    start: float  # seconds
+    timestamp: str  # MM:SS
+    ocr_text: str = ""  # on-screen text extracted via OCR
+
+
+class VideoVisual(BaseModel):
+    video_id: VideoSlot
+    platform: Platform
+    available: bool = False
+    frames: list[VisualFrame] = Field(default_factory=list)
+    visual_summary: str = ""  # scene description from the vision LLM (if enabled)
+
+
+class VisualResponse(BaseModel):
+    analysis_id: str
+    enabled: bool = False  # ENABLE_VISUAL
+    vision_enabled: bool = False  # OpenAI vision available for scene descriptions
+    visuals: dict[VideoSlot, VideoVisual]
+
+
 class ChatRequest(BaseModel):
     analysis_id: str
     message: str = Field(..., min_length=1)

@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     instagram_cookies_file: str = Field(default="", alias="INSTAGRAM_COOKIES_FILE")
     cookies_from_browser: str = Field(default="", alias="COOKIES_FROM_BROWSER")
 
+    # Visual understanding (frame OCR + optional vision-LLM scene description).
+    enable_visual: bool = Field(default=False, alias="ENABLE_VISUAL")
+    tesseract_cmd: str = Field(default="", alias="TESSERACT_CMD")
+    visual_max_frames: int = Field(default=8, alias="VISUAL_MAX_FRAMES")
+    visual_max_height: int = Field(default=720, alias="VISUAL_MAX_HEIGHT")
+
     @property
     def openai_configured(self) -> bool:
         return bool(self.openai_api_key and self.openai_api_key.strip())

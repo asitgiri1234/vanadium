@@ -119,6 +119,33 @@ class ChromaStore:
         )
         logger.info("Upserted %d metadata records", len(ids))
 
+    def upsert_visual(
+        self,
+        analysis_id: str,
+        video_id: VideoSlot,
+        platform: Platform,
+        text: str,
+        embedding: list[float],
+    ) -> None:
+        """Store a video's visual analysis (OCR + scene summary) as a record."""
+        if not text.strip():
+            return
+        collection = self._get_collection()
+        collection.upsert(
+            ids=[f"{analysis_id}:{video_id}:visual"],
+            embeddings=[embedding],
+            documents=[text],
+            metadatas=[
+                {
+                    "record_type": "visual",
+                    "analysis_id": analysis_id,
+                    "video_id": video_id,
+                    "source_platform": platform.value,
+                }
+            ],
+        )
+        logger.info("Upserted visual record for video %s", video_id)
+
     def get_metadata_records(self, analysis_id: str) -> list[dict[str, Any]]:
         """Return the stored metadata records for an analysis (for inspection)."""
         collection = self._get_collection()

@@ -9,7 +9,13 @@ from __future__ import annotations
 import threading
 
 from app.core.config import settings
-from app.models.schemas import AnalysisSnapshot, ChatTurn, TranscriptSegment, VideoSlot
+from app.models.schemas import (
+    AnalysisSnapshot,
+    ChatTurn,
+    TranscriptSegment,
+    VideoSlot,
+    VideoVisual,
+)
 
 
 class AnalysisStore:
@@ -18,6 +24,7 @@ class AnalysisStore:
         self._snapshots: dict[str, AnalysisSnapshot] = {}
         self._memory: dict[str, list[ChatTurn]] = {}
         self._transcripts: dict[str, dict[VideoSlot, list[TranscriptSegment]]] = {}
+        self._visuals: dict[str, dict[VideoSlot, VideoVisual]] = {}
         self._max_turns = max_turns or settings.memory_max_turns
 
     # --- snapshots --- #
@@ -46,6 +53,18 @@ class AnalysisStore:
         with self._lock:
             stored = self._transcripts.get(analysis_id)
             return {k: list(v) for k, v in stored.items()} if stored else None
+
+    # --- visuals --- #
+    def save_visuals(
+        self, analysis_id: str, visuals: dict[VideoSlot, VideoVisual]
+    ) -> None:
+        with self._lock:
+            self._visuals[analysis_id] = visuals
+
+    def get_visuals(self, analysis_id: str) -> dict[VideoSlot, VideoVisual] | None:
+        with self._lock:
+            stored = self._visuals.get(analysis_id)
+            return dict(stored) if stored else None
 
     # --- conversation memory --- #
     def get_memory(self, analysis_id: str) -> list[ChatTurn]:

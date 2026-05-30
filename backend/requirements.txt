@@ -29,3 +29,10 @@ tenacity>=8.2
 # Whisper transcribes reel audio (set ENABLE_WHISPER=true). It pulls in PyTorch
 # (large) and requires the ffmpeg binary to be installed and on PATH.
 openai-whisper>=20231117
+
+# --- Visual understanding (set ENABLE_VISUAL=true) ---
+# OCR reads on-screen text from sampled frames. Requires the Tesseract binary
+# (install separately; point TESSERACT_CMD at it on Windows). The optional
+# scene description uses the configured vision LLM when an OpenAI key is set.
+pytesseract>=0.3.10
+pillow>=10.0

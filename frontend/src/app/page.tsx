@@ -5,6 +5,7 @@ import Image from "next/image";
 import { UrlForm } from "@/components/url-form";
 import { VideoCard } from "@/components/video-card";
 import { TranscriptPanel } from "@/components/transcript-panel";
+import { VisualPanel } from "@/components/visual-panel";
 import { ingest } from "@/lib/api";
 import type { AnalysisSnapshot } from "@/lib/types";
 
@@ -58,6 +59,7 @@ export default function Home() {
               <VideoCard video={snapshot.videos.B} />
             </section>
             <TranscriptPanel analysisId={snapshot.analysis_id} />
+            <VisualPanel analysisId={snapshot.analysis_id} />
           </>
         )}
 

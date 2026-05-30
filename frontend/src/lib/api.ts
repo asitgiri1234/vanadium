@@ -1,4 +1,9 @@
-import type { AnalysisSnapshot, Citation, TranscriptResponse } from "./types";
+import type {
+  AnalysisSnapshot,
+  Citation,
+  TranscriptResponse,
+  VisualResponse,
+} from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -61,6 +66,12 @@ export async function getAnalysis(id: string): Promise<AnalysisSnapshot> {
 export async function getTranscript(id: string): Promise<TranscriptResponse> {
   return jsonOrThrow<TranscriptResponse>(
     await fetch(`${API_URL}/api/analysis/${id}/transcript`),
+  );
+}
+
+export async function getVisual(id: string): Promise<VisualResponse> {
+  return jsonOrThrow<VisualResponse>(
+    await fetch(`${API_URL}/api/analysis/${id}/visual`),
   );
 }
 

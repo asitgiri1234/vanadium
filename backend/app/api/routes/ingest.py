@@ -13,6 +13,8 @@ from app.models.schemas import (
     TranscriptLine,
     TranscriptResponse,
     VideoTranscript,
+    VideoVisual,
+    VisualResponse,
 )
 from app.services.ingestion_service import UnsupportedURLError, ingestion_service
 from app.store.analysis_store import analysis_store
@@ -72,4 +74,26 @@ async def get_transcript(analysis_id: str) -> TranscriptResponse:
         analysis_id=analysis_id,
         whisper_enabled=settings.enable_whisper,
         transcripts=transcripts,  # type: ignore[arg-type]
+    )
+
+
+@router.get("/analysis/{analysis_id}/visual", response_model=VisualResponse)
+async def get_visual(analysis_id: str) -> VisualResponse:
+    snapshot = analysis_store.get(analysis_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    stored = analysis_store.get_visuals(analysis_id) or {}
+    visuals: dict[str, VideoVisual] = {}
+    for slot in ("A", "B"):
+        visuals[slot] = stored.get(slot) or VideoVisual(  # type: ignore[arg-type]
+            video_id=slot,  # type: ignore[arg-type]
+            platform=snapshot.videos[slot].platform,  # type: ignore[index]
+            available=False,
+        )
+    return VisualResponse(
+        analysis_id=analysis_id,
+        enabled=settings.enable_visual,
+        vision_enabled=settings.enable_visual and settings.openai_configured,
+        visuals=visuals,  # type: ignore[arg-type]
     )
