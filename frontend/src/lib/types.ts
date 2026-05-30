@@ -59,6 +59,7 @@ export interface VideoTranscript {
 
 export interface TranscriptResponse {
   analysis_id: string;
+  whisper_enabled: boolean;
   transcripts: Record<VideoSlot, VideoTranscript>;
 }
 

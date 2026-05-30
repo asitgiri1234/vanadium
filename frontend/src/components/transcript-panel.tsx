@@ -75,7 +75,7 @@ export function TranscriptPanel({ analysisId }: { analysisId: string }) {
         )}
 
         {!loading && !error && current && (
-          <TranscriptBody transcript={current} />
+          <TranscriptBody transcript={current} whisperEnabled={!!data?.whisper_enabled} />
         )}
       </CardContent>
     </Card>
@@ -84,18 +84,26 @@ export function TranscriptPanel({ analysisId }: { analysisId: string }) {
 
 function TranscriptBody({
   transcript,
+  whisperEnabled,
 }: {
   transcript: NonNullable<TranscriptResponse["transcripts"][VideoSlot]>;
+  whisperEnabled: boolean;
 }) {
   if (!transcript.available || transcript.segments.length === 0) {
+    const isInstagram = transcript.platform === "instagram";
+    let note: string | null = null;
+    if (isInstagram && !whisperEnabled) {
+      note = "Enable Whisper (ENABLE_WHISPER=true) to transcribe Instagram reels.";
+    } else if (isInstagram && whisperEnabled) {
+      note =
+        "No speech detected — this reel may be music-only or have no voiceover.";
+    } else {
+      note = "No captions/transcript are available for this video.";
+    }
     return (
       <div className="py-10 text-center text-sm text-muted-foreground">
         <p>No transcript available for this video.</p>
-        {transcript.platform === "instagram" && (
-          <p className="mt-1 text-xs text-[hsl(var(--warning))]">
-            Instagram transcription needs Whisper enabled (ENABLE_WHISPER=true).
-          </p>
-        )}
+        <p className="mt-1 text-xs text-[hsl(var(--warning))]">{note}</p>
       </div>
     );
   }

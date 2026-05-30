@@ -156,6 +156,7 @@ class VideoTranscript(BaseModel):
 
 class TranscriptResponse(BaseModel):
     analysis_id: str
+    whisper_enabled: bool = False
     transcripts: dict[VideoSlot, VideoTranscript]
 
 

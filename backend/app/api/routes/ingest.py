@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.schemas import (
     AnalysisSnapshot,
@@ -67,4 +68,8 @@ async def get_transcript(analysis_id: str) -> TranscriptResponse:
             available=bool(lines),
             segments=lines,
         )
-    return TranscriptResponse(analysis_id=analysis_id, transcripts=transcripts)  # type: ignore[arg-type]
+    return TranscriptResponse(
+        analysis_id=analysis_id,
+        whisper_enabled=settings.enable_whisper,
+        transcripts=transcripts,  # type: ignore[arg-type]
+    )
