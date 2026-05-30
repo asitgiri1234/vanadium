@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Atom } from "lucide-react";
 import { UrlForm } from "@/components/url-form";
 import { VideoCard } from "@/components/video-card";
+import { TranscriptPanel } from "@/components/transcript-panel";
 import { ingest } from "@/lib/api";
 import type { AnalysisSnapshot } from "@/lib/types";
 
@@ -44,10 +45,13 @@ export default function Home() {
         <UrlForm onAnalyze={handleAnalyze} loading={loading} error={error} />
 
         {snapshot && (
-          <section className="grid gap-6 md:grid-cols-2">
-            <VideoCard video={snapshot.videos.A} />
-            <VideoCard video={snapshot.videos.B} />
-          </section>
+          <>
+            <section className="grid gap-6 md:grid-cols-2">
+              <VideoCard video={snapshot.videos.A} />
+              <VideoCard video={snapshot.videos.B} />
+            </section>
+            <TranscriptPanel analysisId={snapshot.analysis_id} />
+          </>
         )}
 
         {!snapshot && !loading && (

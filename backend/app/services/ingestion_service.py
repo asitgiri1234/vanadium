@@ -56,6 +56,9 @@ class IngestionService:
         videos: dict[VideoSlot, VideoMetadata] = {"A": meta_a, "B": meta_b}
         self._store_metadata(analysis_id, videos)
 
+        # Keep the raw transcript segments so the full transcript can be shown.
+        analysis_store.save_transcripts(analysis_id, {"A": segs_a, "B": segs_b})
+
         comparison = comparison_service.build_insights(meta_a, meta_b, segs_a, segs_b)
 
         snapshot = AnalysisSnapshot(

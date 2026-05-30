@@ -9,7 +9,7 @@ from __future__ import annotations
 import threading
 
 from app.core.config import settings
-from app.models.schemas import AnalysisSnapshot, ChatTurn
+from app.models.schemas import AnalysisSnapshot, ChatTurn, TranscriptSegment, VideoSlot
 
 
 class AnalysisStore:
@@ -17,6 +17,7 @@ class AnalysisStore:
         self._lock = threading.Lock()
         self._snapshots: dict[str, AnalysisSnapshot] = {}
         self._memory: dict[str, list[ChatTurn]] = {}
+        self._transcripts: dict[str, dict[VideoSlot, list[TranscriptSegment]]] = {}
         self._max_turns = max_turns or settings.memory_max_turns
 
     # --- snapshots --- #
@@ -31,6 +32,20 @@ class AnalysisStore:
     def exists(self, analysis_id: str) -> bool:
         with self._lock:
             return analysis_id in self._snapshots
+
+    # --- transcripts --- #
+    def save_transcripts(
+        self, analysis_id: str, transcripts: dict[VideoSlot, list[TranscriptSegment]]
+    ) -> None:
+        with self._lock:
+            self._transcripts[analysis_id] = transcripts
+
+    def get_transcripts(
+        self, analysis_id: str
+    ) -> dict[VideoSlot, list[TranscriptSegment]] | None:
+        with self._lock:
+            stored = self._transcripts.get(analysis_id)
+            return {k: list(v) for k, v in stored.items()} if stored else None
 
     # --- conversation memory --- #
     def get_memory(self, analysis_id: str) -> list[ChatTurn]:

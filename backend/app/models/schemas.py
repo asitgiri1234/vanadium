@@ -141,6 +141,24 @@ class HealthResponse(BaseModel):
     whisper_enabled: bool
 
 
+class TranscriptLine(BaseModel):
+    start: float  # seconds
+    timestamp: str  # MM:SS
+    text: str
+
+
+class VideoTranscript(BaseModel):
+    video_id: VideoSlot
+    platform: Platform
+    available: bool
+    segments: list[TranscriptLine] = Field(default_factory=list)
+
+
+class TranscriptResponse(BaseModel):
+    analysis_id: str
+    transcripts: dict[VideoSlot, VideoTranscript]
+
+
 class ChatRequest(BaseModel):
     analysis_id: str
     message: str = Field(..., min_length=1)

@@ -44,6 +44,24 @@ export interface Citation {
   snippet: string;
 }
 
+export interface TranscriptLine {
+  start: number;
+  timestamp: string;
+  text: string;
+}
+
+export interface VideoTranscript {
+  video_id: VideoSlot;
+  platform: Platform;
+  available: boolean;
+  segments: TranscriptLine[];
+}
+
+export interface TranscriptResponse {
+  analysis_id: string;
+  transcripts: Record<VideoSlot, VideoTranscript>;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
