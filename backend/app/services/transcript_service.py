@@ -24,6 +24,10 @@ logger = get_logger(__name__)
 
 
 class TranscriptService:
+    def __init__(self) -> None:
+        # Cached Whisper model (loaded lazily on first Instagram transcription).
+        self._whisper_model = None
+
     def fetch(self, url: str, platform: Platform) -> list[TranscriptSegment]:
         try:
             if platform == Platform.youtube:
@@ -118,10 +122,17 @@ class TranscriptService:
             path = ydl.prepare_filename(info)
         return path if os.path.exists(path) else None
 
-    def _transcribe_whisper(self, audio_path: str) -> list[TranscriptSegment]:
-        import whisper  # type: ignore
+    def _load_whisper_model(self):
+        """Load (and cache) the Whisper model so it isn't reloaded per request."""
+        if self._whisper_model is None:
+            import whisper  # type: ignore
 
-        model = whisper.load_model(settings.whisper_model)
+            logger.info("Loading Whisper model '%s'…", settings.whisper_model)
+            self._whisper_model = whisper.load_model(settings.whisper_model)
+        return self._whisper_model
+
+    def _transcribe_whisper(self, audio_path: str) -> list[TranscriptSegment]:
+        model = self._load_whisper_model()
         result = model.transcribe(audio_path)
         segments: list[TranscriptSegment] = []
         for seg in result.get("segments", []):

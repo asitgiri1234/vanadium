@@ -101,5 +101,8 @@ vanadium/
 
 - Instagram Reel transcription uses `yt-dlp` + Whisper and can be slow; in
   production this should run in a background worker (see ARCHITECTURE §8).
+  To enable it: install [`ffmpeg`](https://ffmpeg.org/) (must be on `PATH`),
+  `pip install openai-whisper`, and set `ENABLE_WHISPER=true` in `backend/.env`.
+  The first reel is slowest (downloads the Whisper model + the audio).
 - The analysis + memory store is in-memory by default; swap for Redis/Postgres
   for multi-instance deployments.
