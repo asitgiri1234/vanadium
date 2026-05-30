@@ -4,22 +4,26 @@
 
 @layer base {
   :root {
-    --background: 222 47% 6%;
-    --foreground: 210 40% 98%;
-    --card: 222 40% 9%;
-    --card-foreground: 210 40% 98%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --primary: 199 89% 48%;
-    --primary-foreground: 222 47% 6%;
-    --accent: 199 89% 48%;
-    --accent-foreground: 210 40% 98%;
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 199 89% 48%;
-    --success: 142 71% 45%;
-    --warning: 38 92% 50%;
-    --radius: 0.75rem;
+    --background: 240 12% 4%;
+    --foreground: 0 0% 98%;
+    --card: 250 14% 7%;
+    --card-foreground: 0 0% 98%;
+    --muted: 255 12% 14%;
+    --muted-foreground: 252 10% 62%;
+    --primary: 276 91% 66%;
+    --primary-foreground: 0 0% 100%;
+    --accent: 187 92% 53%;
+    --accent-foreground: 240 12% 4%;
+    --border: 260 18% 16%;
+    --input: 260 18% 16%;
+    --ring: 276 91% 66%;
+    --success: 152 70% 47%;
+    --warning: 38 92% 55%;
+    --radius: 0.85rem;
+
+    /* Brand gradient stops (purple -> cyan) */
+    --grad-from: 276 91% 66%;
+    --grad-to: 187 92% 53%;
   }
 
   * {
@@ -29,6 +33,39 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    background-image:
+      radial-gradient(60rem 60rem at 12% -10%, hsl(276 91% 40% / 0.16), transparent 55%),
+      radial-gradient(55rem 55rem at 100% 0%, hsl(187 92% 45% / 0.12), transparent 50%);
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  /* Purple -> cyan text gradient for the wordmark / accent numbers */
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(
+      100deg,
+      hsl(var(--grad-from)),
+      hsl(var(--grad-to))
+    );
+  }
+
+  /* 1px gradient border via padding wrapper */
+  .gradient-border {
+    position: relative;
+    background:
+      linear-gradient(hsl(var(--card)), hsl(var(--card))) padding-box,
+      linear-gradient(120deg, hsl(var(--grad-from)), hsl(var(--grad-to))) border-box;
+    border: 1px solid transparent;
+  }
+
+  .gradient-bg {
+    background-image: linear-gradient(
+      100deg,
+      hsl(var(--grad-from)),
+      hsl(var(--grad-to))
+    );
   }
 }
 

@@ -33,7 +33,7 @@ export function UrlForm({
             value={urlA}
             onChange={setUrlA}
             disabled={loading}
-            accent="text-sky-400"
+            accent="text-violet-400"
           />
           <Field
             label="Video B"
@@ -41,9 +41,14 @@ export function UrlForm({
             value={urlB}
             onChange={setUrlB}
             disabled={loading}
-            accent="text-violet-400"
+            accent="text-cyan-400"
           />
-          <Button type="submit" disabled={loading || !urlA || !urlB} className="md:mb-0">
+          <Button
+            type="submit"
+            variant="gradient"
+            disabled={loading || !urlA || !urlB}
+            className="md:mb-0"
+          >
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" /> Analyzing…

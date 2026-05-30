@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Atom } from "lucide-react";
+import Image from "next/image";
 import { UrlForm } from "@/components/url-form";
 import { VideoCard } from "@/components/video-card";
 import { TranscriptPanel } from "@/components/transcript-panel";
@@ -29,12 +29,19 @@ export default function Home() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      <header className="mb-8 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15">
-          <Atom className="h-6 w-6 text-primary" />
-        </div>
+      <header className="mb-10 flex items-center gap-4">
+        <Image
+          src="/logo.png"
+          alt="Vanadium"
+          width={56}
+          height={56}
+          priority
+          className="rounded-xl shadow-lg shadow-primary/20"
+        />
         <div>
-          <h1 className="text-xl font-bold tracking-tight">Vanadium</h1>
+          <h1 className="text-gradient text-2xl font-extrabold tracking-tight">
+            Vanadium
+          </h1>
           <p className="text-xs text-muted-foreground">
             AI content intelligence for creators
           </p>

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { thumbnailSrc } from "@/lib/api";
 import type { VideoMetadata } from "@/lib/types";
-import { formatNumber } from "@/lib/utils";
+import { cn, formatNumber } from "@/lib/utils";
 
 function formatDuration(seconds: number): string {
   if (!seconds) return "—";
@@ -37,8 +37,10 @@ function Metric({
 export function VideoCard({ video }: { video: VideoMetadata }) {
   const thumb = thumbnailSrc(video.thumbnail, video.platform);
   const viewsKnown = video.views > 0;
+  const accentRing =
+    video.video_id === "A" ? "ring-violet-500/40" : "ring-cyan-500/40";
   return (
-    <Card className="overflow-hidden ring-1 ring-border">
+    <Card className={cn("overflow-hidden ring-1", accentRing)}>
       <div className="relative aspect-video w-full bg-muted">
         {thumb ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -75,8 +77,12 @@ export function VideoCard({ video }: { video: VideoMetadata }) {
 
       <CardContent className="space-y-4">
         <div className="rounded-lg border border-border bg-muted/30 p-4 text-center">
-          <div className="text-3xl font-bold text-primary">
-            {viewsKnown ? `${video.engagement_rate}%` : "N/A"}
+          <div className="text-4xl font-extrabold">
+            {viewsKnown ? (
+              <span className="text-gradient">{video.engagement_rate}%</span>
+            ) : (
+              <span className="text-muted-foreground">N/A</span>
+            )}
           </div>
           <div className="text-xs uppercase tracking-wide text-muted-foreground">
             Engagement rate
