@@ -59,28 +59,22 @@ GROQ_API_KEY=gsk_...
 CORS_ORIGINS=https://your-app.vercel.app
 CHROMA_PERSIST_DIR=/data/chroma
 ANALYSIS_PERSIST_DIR=/data/analyses
+ENABLE_WHISPER=true
+WHISPER_PROVIDER=auto
+ENABLE_VISUAL=true
 ```
 
-**Free instance notes (purple banner in Render):**
-- Persistent disk is **not available** on Free — analyses reset on redeploy. Upgrade to Starter+ and mount `/data` for persistence.
-- 512 MB RAM will **OOM** with Whisper. On Free, start with:
-  ```env
-  ENABLE_WHISPER=false
-  ENABLE_VISUAL=false
-  ```
-  YouTube comparisons still work; Instagram Whisper/visual need a paid plan (≥4 GB RAM).
+**Instagram Reels on Free tier:** Whisper now runs via **Groq's cloud API** (same `GROQ_API_KEY`) — not local PyTorch. Set `ENABLE_WHISPER=true` and `WHISPER_PROVIDER=auto`. No 4 GB RAM needed for transcription.
 
-**Paid plan:** add a **persistent disk** mounted at `/data` (≥1 GB), then enable Whisper/visual:
+**Free instance limits:**
+- Persistent disk is **not available** on Free — analyses reset on redeploy. Upgrade to Starter+ and mount `/data` for persistence.
+- Visual analysis (`ENABLE_VISUAL=true`) downloads reel video + calls Groq vision — usually fine on Free; disable if you hit OOM.
+
+**Optional embeddings (recommended):**
 
 ```env
-ENABLE_WHISPER=true
-WHISPER_MODEL=base
-ENABLE_VISUAL=true
-ENABLE_OCR=true
-OPENAI_API_KEY=sk-...          # optional, for embeddings
+OPENAI_API_KEY=sk-...
 ```
-
-9. **Plan:** Starter or Standard (Free works for YouTube-only demos with Whisper disabled).
 
 ### Local Docker test
 
@@ -92,8 +86,9 @@ docker run --rm -p 8000:8000 \
   -e GROQ_API_KEY=gsk_... \
   -e LLM_PROVIDER=groq \
   -e CORS_ORIGINS=http://localhost:3000 \
-  -e ENABLE_WHISPER=false \
-  -e ENABLE_VISUAL=false \
+  -e ENABLE_WHISPER=true \
+  -e WHISPER_PROVIDER=auto \
+  -e ENABLE_VISUAL=true \
   vanadium-api
 curl http://localhost:8000/api/health
 ```

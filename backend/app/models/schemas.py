@@ -146,6 +146,7 @@ class HealthResponse(BaseModel):
     openai_configured: bool = False
     groq_configured: bool = False
     whisper_enabled: bool = False
+    whisper_provider: str = "none"
     visual_enabled: bool = False
 
 

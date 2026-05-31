@@ -28,7 +28,7 @@ def warmup_heavy_dependencies() -> None:
 
         from app.core.config import settings
 
-        if settings.enable_whisper:
+        if settings.enable_whisper and settings.whisper_provider.lower() == "local":
             import whisper  # noqa: F401
 
         _warmed = True

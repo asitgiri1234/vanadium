@@ -62,7 +62,12 @@ class Settings(BaseSettings):
     cors_origins: str = Field(default="http://localhost:3000", alias="CORS_ORIGINS")
 
     # Instagram transcription
+    # Provider: auto (Groq API if key set, else local), groq, local
+    whisper_provider: str = Field(default="auto", alias="WHISPER_PROVIDER")
     whisper_model: str = Field(default="base", alias="WHISPER_MODEL")
+    groq_whisper_model: str = Field(
+        default="whisper-large-v3-turbo", alias="GROQ_WHISPER_MODEL"
+    )
     enable_whisper: bool = Field(default=False, alias="ENABLE_WHISPER")
 
     # Instagram authentication for yt-dlp (unlocks views/play counts + private
