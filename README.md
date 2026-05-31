@@ -40,6 +40,8 @@ RAG pipeline with conversation memory and streaming responses.
 See **[ARCHITECTURE.md](./ARCHITECTURE.md)** for the full design, API contract,
 data model, RAG pipeline, and roadmap.
 
+**Going live?** See **[DEPLOY.md](./DEPLOY.md)** for Vercel + Docker backend deployment.
+
 ---
 
 ## 🚀 Quickstart

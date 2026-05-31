@@ -1,0 +1,47 @@
+# Render Blueprint — Vanadium backend (Docker + persistent disk).
+# Docs: https://render.com/docs/blueprint-spec
+#
+# After deploy:
+#   1. Set GROQ_API_KEY (and optionally OPENAI_API_KEY) in the Render dashboard.
+#   2. Set CORS_ORIGINS to your Vercel URL.
+#   3. Point Vercel NEXT_PUBLIC_API_URL at the Render service URL.
+
+services:
+  - type: web
+    name: vanadium-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: standard
+    region: oregon
+    healthCheckPath: /api/health
+    numInstances: 1
+    disk:
+      name: vanadium-data
+      mountPath: /data
+      sizeGB: 2
+    envVars:
+      - key: LLM_PROVIDER
+        value: groq
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: GROQ_VISION_MODEL
+        value: meta-llama/llama-4-scout-17b-16e-instruct
+      - key: ENABLE_WHISPER
+        value: "true"
+      - key: WHISPER_MODEL
+        value: base
+      - key: ENABLE_VISUAL
+        value: "true"
+      - key: ENABLE_OCR
+        value: "true"
+      - key: CHROMA_PERSIST_DIR
+        value: /data/chroma
+      - key: ANALYSIS_PERSIST_DIR
+        value: /data/analyses
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
