@@ -82,10 +82,11 @@ curl http://localhost:8000/api/health
 
 ## 2. Deploy frontend (Vercel)
 
+Vercel detects this monorepo as multi-service. The root [`vercel.json`](vercel.json) deploys **frontend only** — do **not** add the backend service to Vercel (FastAPI needs Render/Railway instead).
+
 1. [vercel.com/new](https://vercel.com/new) → import GitHub repo.
-2. **Root Directory:** `frontend`
-3. **Framework Preset:** Next.js (auto-detected)
-4. **Environment Variables** (required before first deploy):
+2. Vercel reads `vercel.json` at the repo root (frontend at `/`, Next.js).
+3. **Environment Variables** (required before first deploy):
 
 ```env
 NEXT_PUBLIC_API_URL=https://vanadium-api.onrender.com
