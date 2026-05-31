@@ -36,31 +36,51 @@ Browser ──► Vercel (frontend)     NEXT_PUBLIC_API_URL
 
 The blueprint mounts a **2 GB disk** at `/data` for ChromaDB and analysis JSON.
 
-### Option B: Manual Docker service
+### Option B: Manual Web Service (what you used)
 
-1. **New Web Service** → connect repo.
-2. **Root Directory:** leave empty (repo root).
-3. **Runtime:** Docker.
-4. **Dockerfile Path:** `backend/Dockerfile`
-5. **Docker Context:** `backend`
-6. Add a **persistent disk** mounted at `/data` (≥1 GB).
-7. Set env vars (see [backend/.env.example](backend/.env.example)):
+Render failed with **"Exited with status 1 while building"** if **Runtime** is set to Node/Python instead of Docker — there is no app at the repo root for native builds.
+
+**Correct settings in Render → New Web Service:**
+
+| Setting | Value |
+|---------|-------|
+| **Repository** | `asitgiri1234/vanadium` |
+| **Branch** | `main` |
+| **Root Directory** | *(leave blank — repo root)* |
+| **Runtime** | **Docker** ← critical |
+| **Dockerfile Path** | `Dockerfile` *(repo root — auto-detected)* or `backend/Dockerfile` |
+| **Health Check Path** | `/api/health` |
+
+Then add env vars:
 
 ```env
 LLM_PROVIDER=groq
 GROQ_API_KEY=gsk_...
-OPENAI_API_KEY=sk-...          # optional, for embeddings
+CORS_ORIGINS=https://your-app.vercel.app
+CHROMA_PERSIST_DIR=/data/chroma
+ANALYSIS_PERSIST_DIR=/data/analyses
+```
+
+**Free instance notes (purple banner in Render):**
+- Persistent disk is **not available** on Free — analyses reset on redeploy. Upgrade to Starter+ and mount `/data` for persistence.
+- 512 MB RAM will **OOM** with Whisper. On Free, start with:
+  ```env
+  ENABLE_WHISPER=false
+  ENABLE_VISUAL=false
+  ```
+  YouTube comparisons still work; Instagram Whisper/visual need a paid plan (≥4 GB RAM).
+
+**Paid plan:** add a **persistent disk** mounted at `/data` (≥1 GB), then enable Whisper/visual:
+
+```env
 ENABLE_WHISPER=true
 WHISPER_MODEL=base
 ENABLE_VISUAL=true
 ENABLE_OCR=true
-CHROMA_PERSIST_DIR=/data/chroma
-ANALYSIS_PERSIST_DIR=/data/analyses
-CORS_ORIGINS=https://your-app.vercel.app
+OPENAI_API_KEY=sk-...          # optional, for embeddings
 ```
 
-8. **Plan:** Standard (512 MB may OOM with Whisper; use ≥4 GB if available).
-9. **Health check path:** `/api/health`
+9. **Plan:** Starter or Standard (Free works for YouTube-only demos with Whisper disabled).
 
 ### Local Docker test
 
@@ -178,6 +198,9 @@ Rebuild Vercel after setting `NEXT_PUBLIC_API_URL` — it is baked in at build t
 
 **502 / timeout on Analyze**  
 Backend plan too small or cold start; upgrade RAM or disable Whisper for YouTube-only demos.
+
+**Render build fails immediately ("status 1")**  
+Runtime is not Docker. Delete the service, recreate with **Runtime → Docker**. Do not use Node or Python native runtime.
 
 **Instagram views = 0**  
 Set `INSTAGRAM_COOKIES_FILE` with exported session cookies.

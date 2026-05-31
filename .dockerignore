@@ -1,0 +1,13 @@
+frontend
+.git
+.gitignore
+*.md
+.env
+.env.*
+!.env.example
+backend/.venv
+backend/data
+backend/__pycache__
+**/__pycache__
+**/.pytest_cache
+scripts
