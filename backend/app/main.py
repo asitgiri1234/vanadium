@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from app import __version__
 from app.api.router import api_router
@@ -35,6 +36,8 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
+        # Allow any *.vercel.app preview/production URL without listing each one.
+        allow_origin_regex=r"https://[\w-]+\.vercel\.app",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -45,6 +48,10 @@ def create_app() -> FastAPI:
     @app.get("/", tags=["root"])
     async def root() -> dict[str, str]:
         return {"name": "Vanadium API", "version": __version__, "docs": "/docs"}
+
+    @app.head("/", include_in_schema=False)
+    async def root_head() -> Response:
+        return Response(status_code=200)
 
     logger.info(
         "Vanadium API %s ready (provider=%s, llm=%s, whisper=%s, visual=%s)",

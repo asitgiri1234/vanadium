@@ -5,7 +5,39 @@ import type {
   VisualResponse,
 } from "./types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(
+  /\/$/,
+  "",
+);
+
+function fetchErrorMessage(err: unknown, path: string): string {
+  if (err instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(err.message)) {
+    const isProd = typeof window !== "undefined" && window.location.protocol === "https:";
+    const apiIsLocal =
+      API_URL.includes("localhost") || API_URL.startsWith("http://127.0.0.1");
+    if (isProd && apiIsLocal) {
+      return (
+        "Cannot reach the API — NEXT_PUBLIC_API_URL is still localhost. " +
+        "Set it to your Render URL in Vercel env vars and redeploy the frontend."
+      );
+    }
+    return (
+      `Cannot reach the API at ${API_URL}${path}. ` +
+      "Check that Render is running, CORS_ORIGINS includes your Vercel URL, " +
+      "and the free tier instance has finished waking up (~60s)."
+    );
+  }
+  return err instanceof Error ? err.message : "Request failed.";
+}
+
+async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (err) {
+    const path = input.startsWith(API_URL) ? input.slice(API_URL.length) : input;
+    throw new Error(fetchErrorMessage(err, path));
+  }
+}
 
 export interface HealthResponse {
   status: string;
@@ -33,7 +65,7 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
 }
 
 export async function getHealth(): Promise<HealthResponse> {
-  return jsonOrThrow<HealthResponse>(await fetch(`${API_URL}/api/health`));
+  return jsonOrThrow<HealthResponse>(await apiFetch(`${API_URL}/api/health`));
 }
 
 /**
@@ -55,7 +87,7 @@ export async function ingest(
   videoAUrl: string,
   videoBUrl: string,
 ): Promise<AnalysisSnapshot> {
-  const res = await fetch(`${API_URL}/api/ingest`, {
+  const res = await apiFetch(`${API_URL}/api/ingest`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ video_a_url: videoAUrl, video_b_url: videoBUrl }),
@@ -64,18 +96,18 @@ export async function ingest(
 }
 
 export async function getAnalysis(id: string): Promise<AnalysisSnapshot> {
-  return jsonOrThrow<AnalysisSnapshot>(await fetch(`${API_URL}/api/analysis/${id}`));
+  return jsonOrThrow<AnalysisSnapshot>(await apiFetch(`${API_URL}/api/analysis/${id}`));
 }
 
 export async function getTranscript(id: string): Promise<TranscriptResponse> {
   return jsonOrThrow<TranscriptResponse>(
-    await fetch(`${API_URL}/api/analysis/${id}/transcript`),
+    await apiFetch(`${API_URL}/api/analysis/${id}/transcript`),
   );
 }
 
 export async function getVisual(id: string): Promise<VisualResponse> {
   return jsonOrThrow<VisualResponse>(
-    await fetch(`${API_URL}/api/analysis/${id}/visual`),
+    await apiFetch(`${API_URL}/api/analysis/${id}/visual`),
   );
 }
 
@@ -118,7 +150,7 @@ export async function streamChat(
 ): Promise<void> {
   const finished = { value: false };
 
-  const res = await fetch(`${API_URL}/api/chat`, {
+  const res = await apiFetch(`${API_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ analysis_id: analysisId, message }),
