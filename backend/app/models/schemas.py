@@ -119,6 +119,7 @@ class ComparisonInsights(BaseModel):
     strategist_summary: str = ""  # LLM narrative comparison (when OpenAI configured)
     recommendations: list[str] = Field(default_factory=list)  # actionable tips
     ai_pending: bool = False  # True while background LLM comparison is running
+    ai_error: str = ""  # Set when background LLM comparison fails
 
 
 class AnalysisSnapshot(BaseModel):
@@ -140,8 +141,12 @@ class IngestRequest(BaseModel):
 class HealthResponse(BaseModel):
     status: str = "ok"
     version: str
-    openai_configured: bool
-    whisper_enabled: bool
+    llm_provider: str = "openai"
+    llm_configured: bool = False
+    openai_configured: bool = False
+    groq_configured: bool = False
+    whisper_enabled: bool = False
+    visual_enabled: bool = False
 
 
 class TranscriptLine(BaseModel):

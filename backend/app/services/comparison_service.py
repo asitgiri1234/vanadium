@@ -97,7 +97,7 @@ class ComparisonService:
             hook_b=hook_b,
             cta_a=cta_a,
             cta_b=cta_b,
-            ai_pending=settings.openai_configured,
+            ai_pending=settings.llm_configured,
         )
 
     def build_llm_insights(
@@ -231,10 +231,11 @@ class ComparisonService:
         visual_a: VideoVisual | None,
         visual_b: VideoVisual | None,
     ) -> tuple[str, list[str]]:
-        """Generate narrative comparison + recommendations via GPT-4o-mini."""
+        """Generate narrative comparison + recommendations via configured LLM."""
         try:
             from langchain_core.messages import HumanMessage, SystemMessage
-            from langchain_openai import ChatOpenAI
+
+            from app.services.llm_service import get_text_llm
 
             winner_label = f"Video {winner}" if winner else "tie (comparable engagement)"
             excerpt_a = (text_a[:400] + "…") if len(text_a) > 400 else (text_a or "none")
@@ -272,23 +273,23 @@ Respond with valid JSON only (no markdown fences):
   "recommendations": ["3-5 specific actionable tips for improving future content, referencing what worked in the stronger video"]
 }}"""
 
-            llm = ChatOpenAI(
-                model=settings.llm_model,
-                api_key=settings.openai_api_key,
-                temperature=0.4,
-            )
+            llm = get_text_llm(temperature=0.4)
             resp = llm.invoke([
                 SystemMessage(content=(
                     "You are Vanadium, an expert AI content strategist. "
-                    "Compare videos with evidence-backed, creator-friendly advice."
+                    "Compare videos with evidence-backed, creator-friendly advice. "
+                    "Respond with valid JSON only."
                 )),
                 HumanMessage(content=user_content),
             ])
             raw = clean_text(getattr(resp, "content", "") or "")
-            return self._parse_llm_json(raw)
+            summary, recommendations = self._parse_llm_json(raw)
+            if not summary and not recommendations:
+                raise ValueError(f"LLM returned empty comparison: {raw[:120]}")
+            return summary, recommendations
         except Exception as exc:  # noqa: BLE001
-            logger.warning("LLM comparison failed: %s", exc)
-            return "", []
+            logger.exception("LLM comparison failed: %s", exc)
+            raise
 
     @staticmethod
     def _parse_llm_json(raw: str) -> tuple[str, list[str]]:

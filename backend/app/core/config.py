@@ -21,11 +21,24 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
+    # LLM provider: "openai" or "groq"
+    llm_provider: str = Field(default="openai", alias="LLM_PROVIDER")
+
     # OpenAI
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     llm_model: str = Field(default="gpt-4o-mini", alias="LLM_MODEL")
     embedding_model: str = Field(
         default="text-embedding-3-small", alias="EMBEDDING_MODEL"
+    )
+
+    # Groq (OpenAI-compatible API — fast text + Llama 4 Scout for vision)
+    groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
+    groq_model: str = Field(
+        default="llama-3.3-70b-versatile", alias="GROQ_MODEL"
+    )
+    groq_vision_model: str = Field(
+        default="meta-llama/llama-4-scout-17b-16e-instruct",
+        alias="GROQ_VISION_MODEL",
     )
 
     # Vector store
@@ -56,7 +69,7 @@ class Settings(BaseSettings):
     instagram_cookies_file: str = Field(default="", alias="INSTAGRAM_COOKIES_FILE")
     cookies_from_browser: str = Field(default="", alias="COOKIES_FROM_BROWSER")
 
-    # Visual understanding (frame OCR + optional vision-LLM scene description).
+    # Visual understanding (vision LLM reads scene + on-screen text from frames).
     enable_visual: bool = Field(default=False, alias="ENABLE_VISUAL")
     enable_ocr: bool = Field(default=False, alias="ENABLE_OCR")
     tesseract_cmd: str = Field(default="", alias="TESSERACT_CMD")
@@ -66,6 +79,17 @@ class Settings(BaseSettings):
     @property
     def openai_configured(self) -> bool:
         return bool(self.openai_api_key and self.openai_api_key.strip())
+
+    @property
+    def groq_configured(self) -> bool:
+        return bool(self.groq_api_key and self.groq_api_key.strip())
+
+    @property
+    def llm_configured(self) -> bool:
+        """True when the active LLM provider has an API key."""
+        if self.llm_provider.lower() == "groq":
+            return self.groq_configured
+        return self.openai_configured
 
     @property
     def cors_origin_list(self) -> list[str]:

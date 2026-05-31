@@ -10,8 +10,12 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 export interface HealthResponse {
   status: string;
   version: string;
+  llm_provider: string;
+  llm_configured: boolean;
   openai_configured: boolean;
+  groq_configured: boolean;
   whisper_enabled: boolean;
+  visual_enabled: boolean;
 }
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {

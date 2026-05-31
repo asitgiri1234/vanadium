@@ -37,8 +37,12 @@ def create_app() -> FastAPI:
         return {"name": "Vanadium API", "version": __version__, "docs": "/docs"}
 
     logger.info(
-        "Vanadium API %s ready (openai=%s, whisper=%s)",
-        __version__, settings.openai_configured, settings.enable_whisper,
+        "Vanadium API %s ready (provider=%s, llm=%s, whisper=%s, visual=%s)",
+        __version__,
+        settings.llm_provider,
+        settings.llm_configured,
+        settings.enable_whisper,
+        settings.enable_visual,
     )
     return app
 

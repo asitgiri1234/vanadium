@@ -31,6 +31,7 @@ export interface ComparisonInsights {
   strategist_summary: string;
   recommendations: string[];
   ai_pending: boolean;
+  ai_error: string;
 }
 
 export interface AnalysisSnapshot {

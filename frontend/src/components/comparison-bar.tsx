@@ -94,10 +94,21 @@ export function ComparisonBar({
           </ul>
         )}
 
-        {comparison.ai_pending && !comparison.strategist_summary && (
+        {comparison.ai_pending && !comparison.strategist_summary && !comparison.ai_error && (
           <div className="flex items-center gap-2 border-t border-border pt-4 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
             Generating AI strategist summary…
+          </div>
+        )}
+
+        {comparison.ai_error && (
+          <div className="border-t border-border pt-4">
+            <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+              AI comparison failed: {comparison.ai_error}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Check your LLM API key and provider in backend/.env, then restart the server.
+            </p>
           </div>
         )}
 

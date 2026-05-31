@@ -63,8 +63,8 @@ export function VisualPanel({ analysisId }: { analysisId: string }) {
           </div>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          AI vision describes the scene and reads on-screen text — useful when
-          there&apos;s little or no speech.
+          Vision AI describes the scene and reads on-screen text — useful for
+          music-only reels and text-overlay videos.
         </p>
       </CardHeader>
 
@@ -105,8 +105,18 @@ function VisualBody({
       <div className="py-10 text-center text-sm text-muted-foreground">
         <p>Visual analysis is turned off.</p>
         <p className="mt-1 text-xs text-[hsl(var(--warning))]">
-          Set ENABLE_VISUAL=true in the backend. YouTube videos with captions skip
-          this step automatically.
+          Set ENABLE_VISUAL=true in backend/.env and restart the server.
+        </p>
+      </div>
+    );
+  }
+
+  if (!visionEnabled) {
+    return (
+      <div className="py-10 text-center text-sm text-muted-foreground">
+        <p>LLM not configured for vision.</p>
+        <p className="mt-1 text-xs text-[hsl(var(--warning))]">
+          Set GROQ_API_KEY (with LLM_PROVIDER=groq) or OPENAI_API_KEY in backend/.env.
         </p>
       </div>
     );
@@ -115,9 +125,9 @@ function VisualBody({
   if (!visual.available) {
     return (
       <div className="py-10 text-center text-sm text-muted-foreground">
-        <p>No visual analysis for this video.</p>
+        <p>No visual analysis could be extracted for this video.</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          YouTube videos with captions use the transcript instead.
+          The video may be unavailable or frame extraction failed — check backend logs.
         </p>
       </div>
     );
@@ -135,39 +145,20 @@ function VisualBody({
             {visual.visual_summary}
           </p>
         ) : (
-          <p className="text-xs text-muted-foreground">No scene description available.</p>
+          <p className="text-xs text-muted-foreground">No scene description returned.</p>
         )}
       </div>
 
-      {(visual.on_screen_text || visual.frames.length > 0) && (
+      {visual.on_screen_text && (
         <div>
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <ScanText className="h-3.5 w-3.5 text-primary" />
             On-screen text
           </div>
-          {visual.on_screen_text ? (
-            <p className="rounded-lg border border-border bg-muted/30 p-3 text-sm leading-relaxed text-foreground/90">
-              {visual.on_screen_text}
-            </p>
-          ) : (
-            <div className="scroll-thin max-h-[240px] space-y-2 overflow-y-auto pr-2">
-              {visual.frames.map((frame, i) => (
-                <div key={i} className="flex gap-3 text-sm leading-relaxed">
-                  <span className="shrink-0 select-none font-mono text-xs text-primary/80">
-                    {frame.timestamp}
-                  </span>
-                  <span className="text-foreground/90">{frame.ocr_text}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          <p className="rounded-lg border border-border bg-muted/30 p-3 text-sm leading-relaxed text-foreground/90">
+            {visual.on_screen_text}
+          </p>
         </div>
-      )}
-
-      {!visionEnabled && !visual.on_screen_text && visual.frames.length === 0 && (
-        <p className="text-xs text-[hsl(var(--warning))]">
-          Add an OpenAI API key for accurate scene and text analysis.
-        </p>
       )}
     </div>
   );

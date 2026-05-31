@@ -47,7 +47,7 @@ class VisualService:
 
             image_paths = [p for _, p in frame_paths]
 
-            if settings.openai_configured:
+            if settings.llm_configured:
                 summary, on_screen = self._vision_analyze(image_paths)
                 return [], summary, on_screen
 
@@ -170,7 +170,8 @@ class VisualService:
             return "", ""
         try:
             from langchain_core.messages import HumanMessage
-            from langchain_openai import ChatOpenAI
+
+            from app.services.llm_service import get_vision_llm
 
             sample = frame_paths[:_VISION_FRAME_CAP]
             content: list[dict] = [
@@ -195,15 +196,11 @@ class VisualService:
                     }
                 )
 
-            llm = ChatOpenAI(
-                model=settings.llm_model,
-                api_key=settings.openai_api_key,
-                temperature=0.2,
-            )
+            llm = get_vision_llm(temperature=0.2)
             resp = llm.invoke([HumanMessage(content=content)])
             return self._parse_vision_json(getattr(resp, "content", "") or "")
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Vision analysis failed: %s", exc)
+            logger.exception("Vision analysis failed: %s", exc)
             return "", ""
 
     @staticmethod

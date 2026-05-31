@@ -77,7 +77,7 @@ class IngestionService:
         analysis_store.save(snapshot)
         logger.info("Ingest %s complete (ai_pending=%s)", analysis_id, comparison.ai_pending)
 
-        if settings.openai_configured:
+        if settings.llm_configured:
             threading.Thread(
                 target=self._run_llm_comparison,
                 args=(analysis_id, meta_a, meta_b, segs_a, segs_b, vis_a, vis_b, comparison),
@@ -105,10 +105,12 @@ class IngestionService:
             analysis_store.update_comparison(analysis_id, updated)
             logger.info("LLM comparison done for %s", analysis_id)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Background LLM comparison failed for %s: %s", analysis_id, exc)
+            logger.exception("Background LLM comparison failed for %s", analysis_id)
             analysis_store.update_comparison(
                 analysis_id,
-                base_comparison.model_copy(update={"ai_pending": False}),
+                base_comparison.model_copy(
+                    update={"ai_pending": False, "ai_error": str(exc)[:300]}
+                ),
             )
 
     # ----------------------------------------------------------------- #
@@ -127,7 +129,7 @@ class IngestionService:
             embeddings = embedding_service.embed_documents([c.text for c in chunks])
             chroma_store.upsert_chunks(chunks, embeddings)
 
-        visual = self._build_visual(analysis_id, slot, url, platform, segments)
+        visual = self._build_visual(analysis_id, slot, url, platform)
 
         metadata = VideoMetadata(
             video_id=slot,
@@ -153,24 +155,14 @@ class IngestionService:
         )
         return metadata, segments, visual
 
-    @staticmethod
-    def _needs_visual(platform: Platform, segments: list[TranscriptSegment]) -> bool:
-        """Skip heavy frame download for YouTube when captions already exist."""
-        if not settings.enable_visual:
-            return False
-        if platform == Platform.youtube and segments:
-            return False
-        return True
-
     def _build_visual(
         self,
         analysis_id: str,
         slot: VideoSlot,
         url: str,
         platform: Platform,
-        segments: list[TranscriptSegment],
     ) -> VideoVisual:
-        if not self._needs_visual(platform, segments):
+        if not settings.enable_visual:
             return VideoVisual(video_id=slot, platform=platform, available=False)
 
         frames, summary, on_screen = visual_service.extract(url, platform)

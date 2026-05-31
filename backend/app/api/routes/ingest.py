@@ -94,6 +94,6 @@ async def get_visual(analysis_id: str) -> VisualResponse:
     return VisualResponse(
         analysis_id=analysis_id,
         enabled=settings.enable_visual,
-        vision_enabled=settings.enable_visual and settings.openai_configured,
+        vision_enabled=settings.enable_visual and settings.llm_configured,
         visuals=visuals,  # type: ignore[arg-type]
     )

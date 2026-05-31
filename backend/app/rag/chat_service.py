@@ -44,7 +44,7 @@ class ChatService:
             user_prompt = build_user_prompt(context, message)
             history = analysis_store.get_memory(analysis_id)
 
-            if settings.openai_configured:
+            if settings.llm_configured:
                 async for token in self._stream_openai(user_prompt, history):
                     answer_parts.append(token)
                     yield {"type": "token", "text": token}
@@ -71,14 +71,10 @@ class ChatService:
     # ----------------------------------------------------------------- #
     async def _stream_openai(self, user_prompt: str, history) -> AsyncIterator[str]:
         from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-        from langchain_openai import ChatOpenAI
 
-        llm = ChatOpenAI(
-            model=settings.llm_model,
-            api_key=settings.openai_api_key,
-            temperature=0.3,
-            streaming=True,
-        )
+        from app.services.llm_service import get_text_llm
+
+        llm = get_text_llm(temperature=0.3, streaming=True)
 
         messages: list[Any] = [SystemMessage(content=SYSTEM_PROMPT)]
         for turn in history:
