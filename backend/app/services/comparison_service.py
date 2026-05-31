@@ -20,6 +20,7 @@ from app.models.schemas import (
     VideoSlot,
     VideoVisual,
 )
+from app.utils.formatting import fmt_count
 from app.utils.llm_utils import content_to_text, parse_json_object
 from app.utils.performance import determine_winner, performance_delta, winner_lead_summary
 from app.utils.text import clean_text, first_n_seconds_text, has_cta, keywords
@@ -242,7 +243,7 @@ class ComparisonService:
 VIDEO A ({a.platform.value})
 - title: {a.title}
 - creator: {a.creator} ({a.follower_count:,} followers)
-- views: {a.views:,} | likes: {a.likes:,} | comments: {a.comments:,}
+- views: {a.views:,} | likes: {fmt_count(a.likes)} | comments: {fmt_count(a.comments)}
 - engagement rate: {a.engagement_rate}%
 - duration: {a.duration_seconds}s
 - hook (first 5s): {hook_a or "n/a"}
@@ -253,7 +254,7 @@ VIDEO A ({a.platform.value})
 VIDEO B ({b.platform.value})
 - title: {b.title}
 - creator: {b.creator} ({b.follower_count:,} followers)
-- views: {b.views:,} | likes: {b.likes:,} | comments: {b.comments:,}
+- views: {b.views:,} | likes: {fmt_count(b.likes)} | comments: {fmt_count(b.comments)}
 - engagement rate: {b.engagement_rate}%
 - duration: {b.duration_seconds}s
 - hook (first 5s): {hook_b or "n/a"}

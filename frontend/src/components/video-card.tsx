@@ -51,7 +51,7 @@ export function VideoCard({ video }: { video: VideoMetadata }) {
   }, [video.thumbnail, video.platform]);
 
   const viewsKnown = video.views > 0;
-  const likesKnown = video.likes !== null && video.likes !== undefined && video.likes >= 0;
+  const likesKnown = video.likes !== null && video.likes !== undefined;
   const commentsKnown =
     video.comments !== null && video.comments !== undefined && video.comments >= 0;
   const engagementKnown = viewsKnown && likesKnown;

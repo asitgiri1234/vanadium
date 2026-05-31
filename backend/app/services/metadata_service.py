@@ -142,6 +142,13 @@ class MetadataService:
         # Instagram reels often expose plays under ``play_count`` rather than
         # ``view_count`` (and sometimes neither, in yt-dlp's webpage path).
         views = _as_int(info.get("view_count") or info.get("play_count"))
+        likes = _as_metric_int(info.get("like_count"))
+        comments = _as_metric_int(info.get("comment_count"))
+
+        # Instagram often omits or zeroes like_count when likes are hidden.
+        if platform == Platform.instagram:
+            if info.get("like_count") is None or likes == 0:
+                likes = None
 
         return RawMetadata(
             platform=platform,
@@ -151,8 +158,8 @@ class MetadataService:
             follower_count=follower_count,
             thumbnail=info.get("thumbnail"),
             views=views,
-            likes=_as_metric_int(info.get("like_count")),
-            comments=_as_metric_int(info.get("comment_count")),
+            likes=likes,
+            comments=comments,
             duration_seconds=_as_int(info.get("duration")),
             upload_date=_format_upload_date(info.get("upload_date")),
             hashtags=hashtags,

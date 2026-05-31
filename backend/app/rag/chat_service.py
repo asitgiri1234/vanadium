@@ -23,6 +23,7 @@ from app.rag.prompts import SYSTEM_PROMPT, build_context, build_user_prompt
 from app.rag.retriever import retriever
 from app.services.embedding_service import embedding_service
 from app.store.analysis_store import analysis_store
+from app.utils.formatting import fmt_count
 from app.utils.performance import (
     determine_winner,
     performance_delta,
@@ -175,16 +176,16 @@ class ChatService:
             metric = "views" if winner_decided_by_views(a, b) else "likes"
             lines.append(
                 f"Video {winner} is the stronger performer: "
-                f"{hi.views:,} views / {hi.likes:,} likes vs "
-                f"{lo.views:,} views / {lo.likes:,} likes "
+                f"{hi.views:,} views / {fmt_count(hi.likes)} likes vs "
+                f"{lo.views:,} views / {fmt_count(lo.likes)} likes "
                 f"({delta:,.0f} {metric} margin)."
             )
             lines.append(winner_lead_summary(a, b, winner))
         else:
             lines.append(
                 f"Both videos show comparable performance "
-                f"(A: {a.views:,} views / {a.likes:,} likes · "
-                f"B: {b.views:,} views / {b.likes:,} likes)."
+                f"(A: {a.views:,} views / {fmt_count(a.likes)} likes · "
+                f"B: {b.views:,} views / {fmt_count(b.likes)} likes)."
             )
 
         if comp.headline_insights:

@@ -1,7 +1,7 @@
 import type { VideoMetadata, VideoSlot } from "./types";
 
 function likesKnown(v: VideoMetadata): boolean {
-  return v.likes !== null && v.likes !== undefined && v.likes >= 0;
+  return v.likes !== null && v.likes !== undefined;
 }
 
 /** Same rules as backend: views when both known, otherwise likes. */

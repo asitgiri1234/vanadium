@@ -12,8 +12,8 @@ export function formatNumber(n: number | undefined | null): string {
   return String(n);
 }
 
-/** Format a metric for display; unavailable/hidden counts show as em dash. */
+/** Format a metric for display; unavailable/hidden counts show as N/A. */
 export function formatMetricValue(n: number | null | undefined): string {
-  if (n === null || n === undefined || n < 0) return "—";
+  if (n === null || n === undefined || n < 0) return "N/A";
   return formatNumber(n);
 }
