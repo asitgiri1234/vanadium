@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Calendar, Clock, Eye, Heart, MessageCircle, Users } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,7 +38,18 @@ function Metric({
 }
 
 export function VideoCard({ video }: { video: VideoMetadata }) {
-  const thumb = thumbnailSrc(video.thumbnail, video.platform);
+  const [thumb, setThumb] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    thumbnailSrc(video.thumbnail, video.platform).then((src) => {
+      if (!cancelled) setThumb(src);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [video.thumbnail, video.platform]);
+
   const viewsKnown = video.views > 0;
   const isA = video.video_id === "A";
   const accentGlow = isA

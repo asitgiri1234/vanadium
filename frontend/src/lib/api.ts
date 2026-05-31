@@ -5,37 +5,74 @@ import type {
   VisualResponse,
 } from "./types";
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(
-  /\/$/,
-  "",
-);
+const BUILD_TIME_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+).replace(/\/$/, "");
 
-function fetchErrorMessage(err: unknown, path: string): string {
-  if (err instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(err.message)) {
-    const isProd = typeof window !== "undefined" && window.location.protocol === "https:";
-    const apiIsLocal =
-      API_URL.includes("localhost") || API_URL.startsWith("http://127.0.0.1");
-    if (isProd && apiIsLocal) {
+let resolvedApiUrl: string | null = null;
+let apiUrlPromise: Promise<string> | null = null;
+
+function isLocalUrl(url: string): boolean {
+  return url.includes("localhost") || url.startsWith("http://127.0.0.1");
+}
+
+/** Resolve backend base URL (Render in prod, localhost in dev). */
+export async function getApiBaseUrl(): Promise<string> {
+  if (resolvedApiUrl) return resolvedApiUrl;
+  if (!apiUrlPromise) apiUrlPromise = resolveApiBaseUrl();
+  resolvedApiUrl = await apiUrlPromise;
+  return resolvedApiUrl;
+}
+
+async function resolveApiBaseUrl(): Promise<string> {
+  if (!isLocalUrl(BUILD_TIME_URL)) return BUILD_TIME_URL;
+
+  // Production bundle still points at localhost — read runtime URL from Vercel.
+  if (typeof window !== "undefined" && window.location.protocol === "https:") {
+    try {
+      const res = await fetch("/api/config");
+      if (res.ok) {
+        const body = (await res.json()) as { apiUrl?: string };
+        const apiUrl = body.apiUrl?.replace(/\/$/, "") ?? "";
+        if (apiUrl && !isLocalUrl(apiUrl)) return apiUrl;
+      }
+    } catch {
+      /* use build-time fallback */
+    }
+  }
+
+  return BUILD_TIME_URL;
+}
+
+function fetchErrorMessage(err: unknown, apiUrl: string, path: string): string {
+  if (
+    err instanceof TypeError &&
+    /failed to fetch|networkerror|load failed/i.test(err.message)
+  ) {
+    const isProd =
+      typeof window !== "undefined" && window.location.protocol === "https:";
+    if (isProd && isLocalUrl(apiUrl)) {
       return (
-        "Cannot reach the API — NEXT_PUBLIC_API_URL is still localhost. " +
-        "Set it to your Render URL in Vercel env vars and redeploy the frontend."
+        "Cannot reach the API — backend URL is still localhost. " +
+        "In Vercel set API_URL=https://vanadium-1.onrender.com (or NEXT_PUBLIC_API_URL) " +
+        "for Production, then redeploy."
       );
     }
     return (
-      `Cannot reach the API at ${API_URL}${path}. ` +
-      "Check that Render is running, CORS_ORIGINS includes your Vercel URL, " +
-      "and the free tier instance has finished waking up (~60s)."
+      `Cannot reach the API at ${apiUrl}${path}. ` +
+      "Check Render is running and CORS allows your Vercel domain (~60s cold start on free tier)."
     );
   }
   return err instanceof Error ? err.message : "Request failed.";
 }
 
-async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
+async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const apiUrl = await getApiBaseUrl();
+  const url = `${apiUrl}${path}`;
   try {
-    return await fetch(input, init);
+    return await fetch(url, init);
   } catch (err) {
-    const path = input.startsWith(API_URL) ? input.slice(API_URL.length) : input;
-    throw new Error(fetchErrorMessage(err, path));
+    throw new Error(fetchErrorMessage(err, apiUrl, path));
   }
 }
 
@@ -65,20 +102,21 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
 }
 
 export async function getHealth(): Promise<HealthResponse> {
-  return jsonOrThrow<HealthResponse>(await apiFetch(`${API_URL}/api/health`));
+  return jsonOrThrow<HealthResponse>(await apiFetch("/api/health"));
 }
 
 /**
  * Resolve a displayable thumbnail src. Instagram CDN images are routed through
  * the backend proxy because the CDN blocks direct hotlinking (needs a Referer).
  */
-export function thumbnailSrc(
+export async function thumbnailSrc(
   url: string | null,
   platform: string,
-): string | null {
+): Promise<string | null> {
   if (!url) return null;
   if (platform === "instagram") {
-    return `${API_URL}/api/thumbnail?url=${encodeURIComponent(url)}`;
+    const apiUrl = await getApiBaseUrl();
+    return `${apiUrl}/api/thumbnail?url=${encodeURIComponent(url)}`;
   }
   return url;
 }
@@ -87,7 +125,7 @@ export async function ingest(
   videoAUrl: string,
   videoBUrl: string,
 ): Promise<AnalysisSnapshot> {
-  const res = await apiFetch(`${API_URL}/api/ingest`, {
+  const res = await apiFetch("/api/ingest", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ video_a_url: videoAUrl, video_b_url: videoBUrl }),
@@ -96,18 +134,18 @@ export async function ingest(
 }
 
 export async function getAnalysis(id: string): Promise<AnalysisSnapshot> {
-  return jsonOrThrow<AnalysisSnapshot>(await apiFetch(`${API_URL}/api/analysis/${id}`));
+  return jsonOrThrow<AnalysisSnapshot>(await apiFetch(`/api/analysis/${id}`));
 }
 
 export async function getTranscript(id: string): Promise<TranscriptResponse> {
   return jsonOrThrow<TranscriptResponse>(
-    await apiFetch(`${API_URL}/api/analysis/${id}/transcript`),
+    await apiFetch(`/api/analysis/${id}/transcript`),
   );
 }
 
 export async function getVisual(id: string): Promise<VisualResponse> {
   return jsonOrThrow<VisualResponse>(
-    await apiFetch(`${API_URL}/api/analysis/${id}/visual`),
+    await apiFetch(`/api/analysis/${id}/visual`),
   );
 }
 
@@ -150,7 +188,7 @@ export async function streamChat(
 ): Promise<void> {
   const finished = { value: false };
 
-  const res = await apiFetch(`${API_URL}/api/chat`, {
+  const res = await apiFetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ analysis_id: analysisId, message }),
