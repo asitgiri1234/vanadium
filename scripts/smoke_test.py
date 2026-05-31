@@ -47,7 +47,7 @@ def _request(method: str, path: str, body: dict | None = None, headers: dict | N
 
 
 def test_health() -> None:
-    print("→ GET /api/health")
+    print("-> GET /api/health")
     status, payload = _request("GET", "/api/health")
     if status != 200:
         raise AssertionError(f"health failed: HTTP {status} — {payload}")
@@ -58,9 +58,9 @@ def test_health() -> None:
 
 def test_cors() -> None:
     if not FRONTEND_ORIGIN:
-        print("→ CORS (skipped — set FRONTEND_ORIGIN to test)")
+        print("-> CORS (skipped — set FRONTEND_ORIGIN to test)")
         return
-    print(f"→ CORS preflight from {FRONTEND_ORIGIN}")
+    print(f"-> CORS preflight from {FRONTEND_ORIGIN}")
     url = f"{API_URL}/api/health"
     req = urllib.request.Request(
         url,
@@ -81,9 +81,9 @@ def test_cors() -> None:
 
 def test_ingest_youtube() -> None:
     if not TEST_YT_URL_A or not TEST_YT_URL_B:
-        print("→ POST /api/ingest (skipped — set TEST_YT_URL_A and TEST_YT_URL_B)")
+        print("-> POST /api/ingest (skipped — set TEST_YT_URL_A and TEST_YT_URL_B)")
         return
-    print("→ POST /api/ingest (YouTube pair — may take 1–3 min)")
+    print("-> POST /api/ingest (YouTube pair — may take 1-3 min)")
     status, payload = _request(
         "POST",
         "/api/ingest",
@@ -96,7 +96,7 @@ def test_ingest_youtube() -> None:
     analysis_id = payload["analysis_id"]
     print(f"  OK analysis_id={analysis_id}")
 
-    print("→ GET /api/analysis/{id}")
+    print("-> GET /api/analysis/{id}")
     status, snap = _request("GET", f"/api/analysis/{analysis_id}")
     if status != 200:
         raise AssertionError(f"analysis fetch failed: HTTP {status}")
@@ -105,9 +105,9 @@ def test_ingest_youtube() -> None:
 
 def test_chat_sse() -> None:
     if not TEST_YT_URL_A or not TEST_YT_URL_B:
-        print("→ POST /api/chat SSE (skipped — run ingest test first)")
+        print("-> POST /api/chat SSE (skipped — run ingest test first)")
         return
-    print("→ POST /api/ingest for chat test")
+    print("-> POST /api/ingest for chat test")
     status, payload = _request(
         "POST",
         "/api/ingest",
@@ -117,7 +117,7 @@ def test_chat_sse() -> None:
         raise AssertionError(f"ingest for chat failed: {status} {payload}")
     analysis_id = payload["analysis_id"]
 
-    print("→ POST /api/chat (SSE)")
+    print("-> POST /api/chat (SSE)")
     url = f"{API_URL}/api/chat"
     body = json.dumps({"analysis_id": analysis_id, "message": "Summarize the key differences."}).encode()
     req = urllib.request.Request(
@@ -136,7 +136,7 @@ def test_chat_sse() -> None:
 
 
 def main() -> int:
-    print(f"Vanadium smoke test → {API_URL}\n")
+    print(f"Vanadium smoke test -> {API_URL}\n")
     tests = [test_health, test_cors, test_ingest_youtube, test_chat_sse]
     failed = 0
     for test in tests:
