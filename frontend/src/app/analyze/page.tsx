@@ -83,7 +83,6 @@ export default function AnalyzePage() {
               analysisId={snapshot.analysis_id}
               videoA={snapshot.videos.A}
               videoB={snapshot.videos.B}
-              comparison={snapshot.comparison}
             />
           </div>
         )}

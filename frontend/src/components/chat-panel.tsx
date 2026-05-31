@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CitationChip } from "@/components/citation";
 import { streamChat } from "@/lib/api";
 import { buildChatSuggestions } from "@/lib/chat-suggestions";
-import type { ChatMessage, Citation, ComparisonInsights, VideoMetadata } from "@/lib/types";
+import type { ChatMessage, Citation, VideoMetadata } from "@/lib/types";
 
 let idCounter = 0;
 const nextId = () => `msg_${Date.now()}_${idCounter++}`;
@@ -17,14 +17,12 @@ export function ChatPanel({
   analysisId,
   videoA,
   videoB,
-  comparison,
 }: {
   analysisId: string;
   videoA: VideoMetadata;
   videoB: VideoMetadata;
-  comparison: ComparisonInsights;
 }) {
-  const suggestions = buildChatSuggestions(videoA, videoB, comparison);
+  const suggestions = buildChatSuggestions(videoA, videoB);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);

@@ -23,6 +23,12 @@ from app.rag.prompts import SYSTEM_PROMPT, build_context, build_user_prompt
 from app.rag.retriever import retriever
 from app.services.embedding_service import embedding_service
 from app.store.analysis_store import analysis_store
+from app.utils.performance import (
+    determine_winner,
+    performance_delta,
+    winner_decided_by_views,
+    winner_lead_summary,
+)
 
 logger = get_logger(__name__)
 
@@ -162,18 +168,23 @@ class ChatService:
         comp = snapshot.comparison
 
         lines: list[str] = []
-        winner = comp.winner
+        winner = determine_winner(a, b)
         if winner:
             hi, lo = (a, b) if winner == "A" else (b, a)
+            delta = performance_delta(a, b, winner)
+            metric = "views" if winner_decided_by_views(a, b) else "likes"
             lines.append(
-                f"Video {winner} is the stronger performer: {hi.engagement_rate}% "
-                f"engagement vs {lo.engagement_rate}% for the other "
-                f"(a {comp.engagement_delta}-point gap)."
+                f"Video {winner} is the stronger performer: "
+                f"{hi.views:,} views / {hi.likes:,} likes vs "
+                f"{lo.views:,} views / {lo.likes:,} likes "
+                f"({delta:,.0f} {metric} margin)."
             )
+            lines.append(winner_lead_summary(a, b, winner))
         else:
             lines.append(
-                f"Both videos show similar engagement "
-                f"(A: {a.engagement_rate}%, B: {b.engagement_rate}%)."
+                f"Both videos show comparable performance "
+                f"(A: {a.views:,} views / {a.likes:,} likes · "
+                f"B: {b.views:,} views / {b.likes:,} likes)."
             )
 
         if comp.headline_insights:

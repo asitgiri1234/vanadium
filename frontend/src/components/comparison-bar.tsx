@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { getAnalysis } from "@/lib/api";
 import type { ComparisonInsights, VideoMetadata } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { determinePerformanceWinner, performanceLeadLabel } from "@/lib/chat-suggestions";
 
 export function ComparisonBar({
   analysisId,
@@ -49,7 +50,7 @@ export function ComparisonBar({
   const max = Math.max(videoA.engagement_rate, videoB.engagement_rate, 0.01);
   const widthA = `${(videoA.engagement_rate / max) * 100}%`;
   const widthB = `${(videoB.engagement_rate / max) * 100}%`;
-  const hasViews = videoA.views > 0 && videoB.views > 0;
+  const performanceWinner = determinePerformanceWinner(videoA, videoB);
 
   return (
     <Card>
@@ -57,13 +58,14 @@ export function ComparisonBar({
         <CardTitle className="flex flex-wrap items-center gap-2 text-base">
           <Sparkles className="h-4 w-4 text-primary shadow-glow-sm" />
           <span>Comparison Insights</span>
-          {comparison.winner && hasViews && (
+          {performanceWinner && (
             <Badge
               variant="outline"
               className="ml-auto gap-1 border-violet-500/40 bg-violet-500/10 text-violet-200"
             >
               <Trophy className="h-3 w-3" />
-              Video {comparison.winner} +{comparison.engagement_delta} pts
+              Video {performanceWinner}{" "}
+              {performanceLeadLabel(videoA, videoB, performanceWinner)}
             </Badge>
           )}
         </CardTitle>

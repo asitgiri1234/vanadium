@@ -3,6 +3,12 @@
 from __future__ import annotations
 
 from app.models.schemas import AnalysisSnapshot, Citation, ComparisonInsights, VideoMetadata
+from app.utils.performance import (
+    determine_winner,
+    performance_delta,
+    winner_decided_by_views,
+    winner_lead_summary,
+)
 
 SYSTEM_PROMPT = """\
 You are Vanadium, an expert AI content strategist for social media creators.
@@ -12,7 +18,7 @@ one performs better than the other, then give actionable advice.
 Rules:
 - Video A and Video B are URL slots only — neither is automatically the winner. \
 Always read PERFORMANCE RANKING and COMPARISON SUMMARY for who leads on views \
-and engagement before stating which video performed better.
+and likes before stating which video performed better.
 - Ground every claim in the provided METADATA, TRANSCRIPT EVIDENCE, and VISUAL EVIDENCE.
 - When you use a transcript chunk, reference it inline like [A#4] or [B#2] \
 using the handles shown in the evidence. Visual evidence uses [A#visual] or [B#visual].
@@ -58,10 +64,11 @@ def _evidence_block(citations: list[Citation]) -> str:
 def _performance_ranking(
     a: VideoMetadata, b: VideoMetadata, comp: ComparisonInsights
 ) -> str:
-    """Explicit leader/laggard lines so the LLM never assumes A won."""
-    lines: list[str] = []
+    """Explicit leader/laggard from views (then likes) — never assume slot A won."""
+    winner = determine_winner(a, b)
+    lines: list[str] = [f"  {winner_lead_summary(a, b, winner)}"]
 
-    if a.views > 0 or b.views > 0:
+    if a.views > 0 and b.views > 0:
         if a.views > b.views:
             lines.append(f"  views leader: Video A ({a.views:,} vs {b.views:,})")
         elif b.views > a.views:
@@ -71,23 +78,26 @@ def _performance_ranking(
     else:
         lines.append("  views: unavailable or not reported for one/both videos")
 
-    winner = comp.winner
+    if a.likes > b.likes:
+        lines.append(f"  likes leader: Video A ({a.likes:,} vs {b.likes:,})")
+    elif b.likes > a.likes:
+        lines.append(f"  likes leader: Video B ({b.likes:,} vs {a.likes:,})")
+    else:
+        lines.append(f"  likes: tied ({a.likes:,} each)")
+
     if winner:
         weaker = "B" if winner == "A" else "A"
-        hi = a if winner == "A" else b
-        lo = b if winner == "A" else a
-        lines.append(
-            f"  engagement_rate leader: Video {winner} "
-            f"({hi.engagement_rate}% vs {lo.engagement_rate}%, "
-            f"delta {comp.engagement_delta} pts)"
-        )
-        lines.append(f"  stronger performer (primary): Video {winner}")
+        delta = performance_delta(a, b, winner)
+        metric = "views" if winner_decided_by_views(a, b) else "likes"
+        lines.append(f"  overall winner (views then likes): Video {winner}")
+        lines.append(f"  margin: {delta:,.0f} {metric}")
         lines.append(f"  video to improve: Video {weaker}")
     else:
-        lines.append(
-            f"  engagement_rate: tie (A {a.engagement_rate}% · B {b.engagement_rate}%)"
-        )
+        lines.append("  overall winner: tie")
 
+    lines.append(
+        f"  engagement_rate (secondary): A {a.engagement_rate}% · B {b.engagement_rate}%"
+    )
     return "\n".join(lines)
 
 
@@ -102,7 +112,9 @@ def build_context(
     comp = snapshot.comparison
 
     headline = "\n".join(f"  - {i}" for i in comp.headline_insights) or "  - n/a"
-    winner = comp.winner or "tie"
+    perf_winner = determine_winner(a, b)
+    winner = perf_winner or "tie"
+    delta = performance_delta(a, b, perf_winner)
     recs = "\n".join(f"  - {r}" for r in comp.recommendations) or "  - n/a"
 
     baseline = ""
@@ -120,7 +132,7 @@ def build_context(
         "PERFORMANCE RANKING\n"
         f"{_performance_ranking(a, b, comp)}\n\n"
         "COMPARISON SUMMARY\n"
-        f"  engagement winner: Video {winner} (delta {comp.engagement_delta} pts)\n"
+        f"  performance winner: Video {winner} (margin {delta:,.0f})\n"
         f"  hook A: {comp.hook_a or 'n/a'}\n"
         f"  hook B: {comp.hook_b or 'n/a'}\n"
         f"  CTA present — A: {comp.cta_a}, B: {comp.cta_b}\n"

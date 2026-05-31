@@ -21,6 +21,7 @@ from app.models.schemas import (
     VideoVisual,
 )
 from app.utils.llm_utils import content_to_text, parse_json_object
+from app.utils.performance import determine_winner, performance_delta, winner_lead_summary
 from app.utils.text import clean_text, first_n_seconds_text, has_cta, keywords
 
 logger = get_logger(__name__)
@@ -81,8 +82,8 @@ class ComparisonService:
         cta_a = has_cta(text_a)
         cta_b = has_cta(text_b)
 
-        winner = self._winner(video_a, video_b)
-        delta = round(abs(video_a.engagement_rate - video_b.engagement_rate), 2)
+        winner = determine_winner(video_a, video_b)
+        delta = performance_delta(video_a, video_b, winner)
 
         insights = self._headlines(
             video_a, video_b, hook_a, hook_b, cta_a, cta_b,
@@ -115,7 +116,7 @@ class ComparisonService:
         hook_b = first_n_seconds_text(_segments_to_pairs(segments_b))
         text_a = _full_text(segments_a)
         text_b = _full_text(segments_b)
-        winner = self._winner(video_a, video_b)
+        winner = determine_winner(video_a, video_b)
 
         summary, recommendations = self._llm_strategist(
             video_a, video_b, hook_a, hook_b,
@@ -144,12 +145,6 @@ class ComparisonService:
             }
         )
 
-    @staticmethod
-    def _winner(a: VideoMetadata, b: VideoMetadata) -> VideoSlot | None:
-        if a.engagement_rate == b.engagement_rate:
-            return None
-        return "A" if a.engagement_rate > b.engagement_rate else "B"
-
     def _headlines(
         self,
         a: VideoMetadata,
@@ -167,13 +162,9 @@ class ComparisonService:
         out: list[str] = []
 
         if winner:
-            hi, lo = (a, b) if winner == "A" else (b, a)
-            out.append(
-                f"Video {winner} leads on engagement "
-                f"({hi.engagement_rate}% vs {lo.engagement_rate}%)."
-            )
+            out.append(winner_lead_summary(a, b, winner))
         else:
-            out.append("Both videos have comparable engagement rates.")
+            out.append("Both videos show comparable views and likes.")
 
         # Hook contrast.
         if hook_a and hook_b:
