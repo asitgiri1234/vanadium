@@ -78,7 +78,13 @@ export default function AnalyzePage() {
             <SectionLabel icon={Activity} label="Evidence Layers" />
             <TranscriptPanel analysisId={snapshot.analysis_id} />
             <VisualPanel analysisId={snapshot.analysis_id} />
-            <ChatPanel key={snapshot.analysis_id} analysisId={snapshot.analysis_id} />
+            <ChatPanel
+              key={snapshot.analysis_id}
+              analysisId={snapshot.analysis_id}
+              videoA={snapshot.videos.A}
+              videoB={snapshot.videos.B}
+              comparison={snapshot.comparison}
+            />
           </div>
         )}
 

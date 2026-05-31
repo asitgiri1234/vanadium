@@ -7,20 +7,24 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CitationChip } from "@/components/citation";
 import { streamChat } from "@/lib/api";
-import type { ChatMessage, Citation } from "@/lib/types";
-
-const SUGGESTIONS = [
-  "Why did Video A get more engagement than Video B?",
-  "Compare the hooks used in the first 5 seconds.",
-  "Which video had a stronger CTA?",
-  "Suggest improvements for Video B based on what worked in Video A.",
-  "Summarize the key differences between the two videos.",
-];
+import { buildChatSuggestions } from "@/lib/chat-suggestions";
+import type { ChatMessage, Citation, ComparisonInsights, VideoMetadata } from "@/lib/types";
 
 let idCounter = 0;
 const nextId = () => `msg_${Date.now()}_${idCounter++}`;
 
-export function ChatPanel({ analysisId }: { analysisId: string }) {
+export function ChatPanel({
+  analysisId,
+  videoA,
+  videoB,
+  comparison,
+}: {
+  analysisId: string;
+  videoA: VideoMetadata;
+  videoB: VideoMetadata;
+  comparison: ComparisonInsights;
+}) {
+  const suggestions = buildChatSuggestions(videoA, videoB, comparison);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -117,7 +121,7 @@ export function ChatPanel({ analysisId }: { analysisId: string }) {
         className="scroll-thin flex-1 space-y-5 overflow-y-auto py-5"
       >
         {messages.length === 0 ? (
-          <EmptyState onPick={send} />
+          <EmptyState suggestions={suggestions} onPick={send} />
         ) : (
           messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)
         )}
@@ -147,7 +151,13 @@ export function ChatPanel({ analysisId }: { analysisId: string }) {
   );
 }
 
-function EmptyState({ onPick }: { onPick: (q: string) => void }) {
+function EmptyState({
+  suggestions,
+  onPick,
+}: {
+  suggestions: string[];
+  onPick: (q: string) => void;
+}) {
   return (
     <div className="flex flex-col items-center justify-center gap-5 py-10 text-center">
       <div className="relative animate-float">
@@ -164,7 +174,7 @@ function EmptyState({ onPick }: { onPick: (q: string) => void }) {
         </p>
       </div>
       <div className="flex max-w-lg flex-wrap justify-center gap-2">
-        {SUGGESTIONS.map((s) => (
+        {suggestions.map((s) => (
           <button key={s} onClick={() => onPick(s)} className="suggestion-chip">
             {s}
           </button>

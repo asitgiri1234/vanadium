@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.models.schemas import AnalysisSnapshot, Citation, VideoMetadata
+from app.models.schemas import AnalysisSnapshot, Citation, ComparisonInsights, VideoMetadata
 
 SYSTEM_PROMPT = """\
 You are Vanadium, an expert AI content strategist for social media creators.
@@ -10,6 +10,9 @@ You compare two videos (Video A and Video B) and explain, with evidence, why \
 one performs better than the other, then give actionable advice.
 
 Rules:
+- Video A and Video B are URL slots only — neither is automatically the winner. \
+Always read PERFORMANCE RANKING and COMPARISON SUMMARY for who leads on views \
+and engagement before stating which video performed better.
 - Ground every claim in the provided METADATA, TRANSCRIPT EVIDENCE, and VISUAL EVIDENCE.
 - When you use a transcript chunk, reference it inline like [A#4] or [B#2] \
 using the handles shown in the evidence. Visual evidence uses [A#visual] or [B#visual].
@@ -52,6 +55,42 @@ def _evidence_block(citations: list[Citation]) -> str:
     return "\n".join(lines)
 
 
+def _performance_ranking(
+    a: VideoMetadata, b: VideoMetadata, comp: ComparisonInsights
+) -> str:
+    """Explicit leader/laggard lines so the LLM never assumes A won."""
+    lines: list[str] = []
+
+    if a.views > 0 or b.views > 0:
+        if a.views > b.views:
+            lines.append(f"  views leader: Video A ({a.views:,} vs {b.views:,})")
+        elif b.views > a.views:
+            lines.append(f"  views leader: Video B ({b.views:,} vs {a.views:,})")
+        else:
+            lines.append(f"  views: tied ({a.views:,} each)")
+    else:
+        lines.append("  views: unavailable or not reported for one/both videos")
+
+    winner = comp.winner
+    if winner:
+        weaker = "B" if winner == "A" else "A"
+        hi = a if winner == "A" else b
+        lo = b if winner == "A" else a
+        lines.append(
+            f"  engagement_rate leader: Video {winner} "
+            f"({hi.engagement_rate}% vs {lo.engagement_rate}%, "
+            f"delta {comp.engagement_delta} pts)"
+        )
+        lines.append(f"  stronger performer (primary): Video {winner}")
+        lines.append(f"  video to improve: Video {weaker}")
+    else:
+        lines.append(
+            f"  engagement_rate: tie (A {a.engagement_rate}% · B {b.engagement_rate}%)"
+        )
+
+    return "\n".join(lines)
+
+
 def build_context(
     snapshot: AnalysisSnapshot,
     citations: list[Citation],
@@ -78,6 +117,8 @@ def build_context(
         "METADATA\n"
         f"{_metadata_block(a)}\n\n"
         f"{_metadata_block(b)}\n\n"
+        "PERFORMANCE RANKING\n"
+        f"{_performance_ranking(a, b, comp)}\n\n"
         "COMPARISON SUMMARY\n"
         f"  engagement winner: Video {winner} (delta {comp.engagement_delta} pts)\n"
         f"  hook A: {comp.hook_a or 'n/a'}\n"
