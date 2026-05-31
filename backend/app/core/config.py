@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     # Vector store
     chroma_persist_dir: str = Field(default="./data/chroma", alias="CHROMA_PERSIST_DIR")
     chroma_collection: str = Field(default="vanadium_chunks", alias="CHROMA_COLLECTION")
+    analysis_persist_dir: str = Field(
+        default="./data/analyses", alias="ANALYSIS_PERSIST_DIR"
+    )
 
     # Chunking
     chunk_size: int = Field(default=600, alias="CHUNK_SIZE")

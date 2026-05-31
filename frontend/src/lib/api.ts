@@ -86,6 +86,26 @@ export interface ChatHandlers {
   onDone: (messageId: string) => void;
 }
 
+/** Normalize SSE wire format (sse-starlette defaults to CRLF). */
+function normalizeSseBuffer(raw: string): string {
+  return raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function drainSseFrames(
+  buffer: string,
+  handlers: ChatHandlers,
+  finished: { value: boolean },
+): string {
+  let rest = normalizeSseBuffer(buffer);
+  let sep: number;
+  while ((sep = rest.indexOf("\n\n")) !== -1) {
+    const frame = rest.slice(0, sep);
+    rest = rest.slice(sep + 2);
+    dispatchFrame(frame, handlers, finished);
+  }
+  return rest;
+}
+
 /**
  * Stream a chat answer over Server-Sent Events. The backend uses POST, so we
  * read the response body manually instead of the EventSource API.
@@ -96,6 +116,8 @@ export async function streamChat(
   handlers: ChatHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
+  const finished = { value: false };
+
   const res = await fetch(`${API_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -103,8 +125,25 @@ export async function streamChat(
     signal,
   });
 
-  if (!res.ok || !res.body) {
-    handlers.onError(`Chat request failed (${res.status})`);
+  if (!res.ok) {
+    let detail = `Chat request failed (${res.status})`;
+    try {
+      const body = await res.json();
+      if (body?.detail) {
+        detail =
+          typeof body.detail === "string"
+            ? body.detail
+            : JSON.stringify(body.detail);
+      }
+    } catch {
+      /* ignore parse errors */
+    }
+    handlers.onError(detail);
+    return;
+  }
+
+  if (!res.body) {
+    handlers.onError("Chat request failed (no response body)");
     return;
   }
 
@@ -116,24 +155,32 @@ export async function streamChat(
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
+    buffer = drainSseFrames(buffer, handlers, finished);
+  }
 
-    // SSE frames are separated by a blank line.
-    let sep: number;
-    while ((sep = buffer.indexOf("\n\n")) !== -1) {
-      const frame = buffer.slice(0, sep);
-      buffer = buffer.slice(sep + 2);
-      dispatchFrame(frame, handlers);
-    }
+  buffer += decoder.decode(undefined, { stream: false });
+  buffer = drainSseFrames(buffer, handlers, finished);
+  if (buffer.trim()) {
+    dispatchFrame(buffer.trim(), handlers, finished);
+  }
+
+  if (!finished.value) {
+    handlers.onError("Stream ended unexpectedly");
   }
 }
 
-function dispatchFrame(frame: string, handlers: ChatHandlers): void {
+function dispatchFrame(
+  frame: string,
+  handlers: ChatHandlers,
+  finished: { value: boolean },
+): void {
   let event = "message";
   const dataLines: string[] = [];
 
   for (const line of frame.split("\n")) {
-    if (line.startsWith("event:")) event = line.slice(6).trim();
-    else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+    const trimmed = line.trimEnd();
+    if (trimmed.startsWith("event:")) event = trimmed.slice(6).trim();
+    else if (trimmed.startsWith("data:")) dataLines.push(trimmed.slice(5).trim());
   }
   if (dataLines.length === 0) return;
 
@@ -145,16 +192,20 @@ function dispatchFrame(frame: string, handlers: ChatHandlers): void {
   }
 
   switch (event) {
-    case "token":
-      handlers.onToken((data as { text: string }).text);
+    case "token": {
+      const text = (data as { text?: string }).text;
+      if (text) handlers.onToken(text);
       break;
+    }
     case "citations":
       handlers.onCitations(data as Citation[]);
       break;
     case "error":
+      finished.value = true;
       handlers.onError((data as { detail: string }).detail);
       break;
     case "done":
+      finished.value = true;
       handlers.onDone((data as { message_id: string }).message_id);
       break;
   }

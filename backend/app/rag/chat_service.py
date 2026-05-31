@@ -17,10 +17,11 @@ from typing import Any
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.models.schemas import AnalysisSnapshot, Citation
+from app.models.schemas import AnalysisSnapshot, Citation, TranscriptSegment
 from app.rag.citations import select_cited
 from app.rag.prompts import SYSTEM_PROMPT, build_context, build_user_prompt
 from app.rag.retriever import retriever
+from app.services.embedding_service import embedding_service
 from app.store.analysis_store import analysis_store
 
 logger = get_logger(__name__)
@@ -40,12 +41,19 @@ class ChatService:
             # the guard so it degrades to an error event instead of killing the
             # SSE stream and showing a blank reply.
             citations = retriever.retrieve(message, analysis_id)
-            context = build_context(snapshot, citations)
+            transcript_excerpts = self._baseline_transcript_excerpts(analysis_id)
+            context = build_context(
+                snapshot,
+                citations,
+                transcript_excerpts=transcript_excerpts
+                if not embedding_service.using_openai
+                else None,
+            )
             user_prompt = build_user_prompt(context, message)
             history = analysis_store.get_memory(analysis_id)
 
             if settings.llm_configured:
-                async for token in self._stream_openai(user_prompt, history):
+                async for token in self._stream_llm(user_prompt, history):
                     answer_parts.append(token)
                     yield {"type": "token", "text": token}
             else:
@@ -58,6 +66,13 @@ class ChatService:
             return
 
         answer = "".join(answer_parts).strip()
+        if settings.llm_configured and not answer:
+            yield {
+                "type": "error",
+                "detail": "LLM returned an empty response. Try again.",
+            }
+            return
+
         cited = select_cited(answer, citations)
 
         analysis_store.append_turn(analysis_id, "user", message)
@@ -67,15 +82,13 @@ class ChatService:
         yield {"type": "done", "message_id": "m_" + uuid.uuid4().hex[:8]}
 
     # ----------------------------------------------------------------- #
-    # OpenAI streaming via LangChain
+    # LLM streaming via LangChain
     # ----------------------------------------------------------------- #
-    async def _stream_openai(self, user_prompt: str, history) -> AsyncIterator[str]:
+    async def _stream_llm(self, user_prompt: str, history) -> AsyncIterator[str]:
         from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
         from app.services.llm_service import get_text_llm
         from app.utils.llm_utils import content_to_text
-
-        llm = get_text_llm(temperature=0.3, streaming=True)
 
         messages: list[Any] = [SystemMessage(content=SYSTEM_PROMPT)]
         for turn in history:
@@ -85,6 +98,17 @@ class ChatService:
                 messages.append(AIMessage(content=turn.content))
         messages.append(HumanMessage(content=user_prompt))
 
+        # Groq/LangChain streaming often yields empty chunks; invoke-first is reliable.
+        if settings.llm_provider.lower() == "groq":
+            llm = get_text_llm(temperature=0.3, streaming=False)
+            resp = await llm.ainvoke(messages)
+            text = content_to_text(getattr(resp, "content", None)).strip()
+            if text:
+                async for token in self._yield_words(text):
+                    yield token
+            return
+
+        llm = get_text_llm(temperature=0.3, streaming=True)
         emitted = False
         async for chunk in llm.astream(messages):
             text = content_to_text(getattr(chunk, "content", None))
@@ -92,13 +116,39 @@ class ChatService:
                 emitted = True
                 yield text
 
-        # Groq/LangChain may return empty stream chunks — fall back to invoke.
         if not emitted:
             fallback = get_text_llm(temperature=0.3, streaming=False)
             resp = await fallback.ainvoke(messages)
             text = content_to_text(getattr(resp, "content", None))
             if text:
                 yield text
+
+    @staticmethod
+    async def _yield_words(text: str) -> AsyncIterator[str]:
+        words = text.split(" ")
+        for i, w in enumerate(words):
+            yield w if i == 0 else " " + w
+
+    @staticmethod
+    def _baseline_transcript_excerpts(
+        analysis_id: str,
+    ) -> dict[str, str] | None:
+        """First ~400 chars of each video transcript for hash-embedding fallback."""
+        stored = analysis_store.get_transcripts(analysis_id)
+        if not stored:
+            return None
+
+        excerpts: dict[str, str] = {}
+        for slot in ("A", "B"):
+            segments: list[TranscriptSegment] = stored.get(slot)  # type: ignore[arg-type]
+            if not segments:
+                excerpts[slot] = "none"
+                continue
+            full = " ".join(s.text for s in segments).strip()
+            if len(full) > 400:
+                full = full[:400] + "…"
+            excerpts[slot] = full or "none"
+        return excerpts
 
     # ----------------------------------------------------------------- #
     # Offline deterministic analyst

@@ -25,14 +25,25 @@ export function ChatPanel({ analysisId }: { analysisId: string }) {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
   const send = async (text: string) => {
     const question = text.trim();
     if (!question || streaming) return;
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     const userMsg: ChatMessage = { id: nextId(), role: "user", content: question };
     const assistantId = nextId();
@@ -53,24 +64,33 @@ export function ChatPanel({ analysisId }: { analysisId: string }) {
     let buffer = "";
     let citations: Citation[] = [];
 
-    await streamChat(analysisId, question, {
-      onToken: (t) => {
-        buffer += t;
-        update({ content: buffer });
+    await streamChat(
+      analysisId,
+      question,
+      {
+        onToken: (t) => {
+          buffer += t;
+          update({ content: buffer });
+        },
+        onCitations: (c) => {
+          citations = c;
+          update({ citations: c });
+        },
+        onError: (detail) => {
+          update({ content: buffer || `⚠️ ${detail}`, streaming: false });
+          setStreaming(false);
+        },
+        onDone: () => {
+          update({ content: buffer, citations, streaming: false });
+          setStreaming(false);
+        },
       },
-      onCitations: (c) => {
-        citations = c;
-        update({ citations: c });
-      },
-      onError: (detail) => {
-        update({ content: buffer || `⚠️ ${detail}`, streaming: false });
+      controller.signal,
+    ).catch((err) => {
+      if (err instanceof Error && err.name === "AbortError") {
         setStreaming(false);
-      },
-      onDone: () => {
-        update({ content: buffer, citations, streaming: false });
-        setStreaming(false);
-      },
-    }).catch((err) => {
+        return;
+      }
       update({ content: buffer || `⚠️ ${err.message}`, streaming: false });
       setStreaming(false);
     });

@@ -68,7 +68,7 @@ export default function Home() {
             />
             <TranscriptPanel analysisId={snapshot.analysis_id} />
             <VisualPanel analysisId={snapshot.analysis_id} />
-            <ChatPanel analysisId={snapshot.analysis_id} />
+            <ChatPanel key={snapshot.analysis_id} analysisId={snapshot.analysis_id} />
           </>
         )}
 

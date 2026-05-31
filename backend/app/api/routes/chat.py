@@ -33,4 +33,5 @@ async def chat(payload: ChatRequest) -> EventSourceResponse:
     return EventSourceResponse(
         _event_stream(payload.analysis_id, payload.message),
         media_type="text/event-stream",
+        sep="\n",
     )
