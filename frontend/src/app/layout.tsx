@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { ScrollProgress } from "@/components/scroll-progress";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -32,6 +33,7 @@ export default function RootLayout({
       >
         <div className="ambient-grid" aria-hidden />
         <div className="scanline" aria-hidden />
+        <ScrollProgress />
         <div className="relative z-10">{children}</div>
       </body>
     </html>
