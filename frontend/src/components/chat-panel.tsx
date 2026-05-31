@@ -97,17 +97,24 @@ export function ChatPanel({ analysisId }: { analysisId: string }) {
   };
 
   return (
-    <Card className="flex h-[640px] flex-col">
-      <CardHeader className="border-b border-border pb-4">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Sparkles className="h-4 w-4 text-primary" />
-          Ask Vanadium
+    <Card className="flex h-[640px] flex-col shadow-glow-sm">
+      <CardHeader className="border-b border-border/50 pb-4">
+        <CardTitle className="flex items-center gap-3 text-base">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/30 bg-primary/10">
+            <Sparkles className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <span>Ask Vanadium</span>
+            <p className="font-mono text-[10px] font-normal uppercase tracking-widest text-muted-foreground">
+              RAG · Evidence-backed Q&A
+            </p>
+          </div>
         </CardTitle>
       </CardHeader>
 
       <CardContent
         ref={scrollRef}
-        className="scroll-thin flex-1 space-y-4 overflow-y-auto py-4"
+        className="scroll-thin flex-1 space-y-5 overflow-y-auto py-5"
       >
         {messages.length === 0 ? (
           <EmptyState onPick={send} />
@@ -116,7 +123,7 @@ export function ChatPanel({ analysisId }: { analysisId: string }) {
         )}
       </CardContent>
 
-      <div className="border-t border-border p-4">
+      <div className="border-t border-border/50 bg-muted/10 p-4 backdrop-blur-md">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -125,10 +132,11 @@ export function ChatPanel({ analysisId }: { analysisId: string }) {
           className="flex gap-2"
         >
           <Input
-            placeholder="Ask why one video outperformed the other…"
+            placeholder="Query the intelligence layer…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={streaming}
+            className="font-mono text-sm"
           />
           <Button type="submit" variant="gradient" size="icon" disabled={streaming || !input.trim()}>
             <Send className="h-4 w-4" />
@@ -141,21 +149,23 @@ export function ChatPanel({ analysisId }: { analysisId: string }) {
 
 function EmptyState({ onPick }: { onPick: (q: string) => void }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
-      <Bot className="h-10 w-10 text-primary" />
+    <div className="flex flex-col items-center justify-center gap-5 py-10 text-center">
+      <div className="relative animate-float">
+        <div className="absolute -inset-4 rounded-full bg-primary/20 blur-2xl" />
+        <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 shadow-glow-sm">
+          <Bot className="h-8 w-8 text-primary" />
+        </div>
+      </div>
       <div>
-        <p className="font-medium">Your AI content strategist is ready.</p>
-        <p className="text-sm text-muted-foreground">
-          Ask anything about the two videos — answers are backed by transcript evidence.
+        <p className="sci-fi-label mb-2">Neural Strategist Ready</p>
+        <p className="max-w-sm text-sm text-muted-foreground">
+          Ask anything about the two videos — answers are grounded in transcript and
+          visual evidence.
         </p>
       </div>
-      <div className="flex flex-wrap justify-center gap-2">
+      <div className="flex max-w-lg flex-wrap justify-center gap-2">
         {SUGGESTIONS.map((s) => (
-          <button
-            key={s}
-            onClick={() => onPick(s)}
-            className="rounded-full border border-border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
+          <button key={s} onClick={() => onPick(s)} className="suggestion-chip">
             {s}
           </button>
         ))}
@@ -169,28 +179,30 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   return (
     <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
       <div
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-          isUser ? "bg-muted" : "bg-primary/15"
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
+          isUser
+            ? "border-border/60 bg-muted/40"
+            : "border-primary/30 bg-primary/10 shadow-glow-sm"
         }`}
       >
         {isUser ? (
-          <User className="h-4 w-4" />
+          <User className="h-4 w-4 text-muted-foreground" />
         ) : (
           <Bot className="h-4 w-4 text-primary" />
         )}
       </div>
       <div className={`max-w-[85%] ${isUser ? "text-right" : ""}`}>
         <div
-          className={`inline-block whitespace-pre-wrap rounded-lg px-4 py-2.5 text-sm ${
-            isUser ? "bg-primary text-primary-foreground" : "bg-muted/50"
+          className={`inline-block whitespace-pre-wrap rounded-xl px-4 py-3 text-sm leading-relaxed ${
+            isUser ? "chat-bubble-user" : "chat-bubble-ai"
           }`}
         >
           {message.content}
           {message.streaming && !message.content && (
-            <span className="inline-flex gap-1">
-              <span className="typing-dot">●</span>
-              <span className="typing-dot">●</span>
-              <span className="typing-dot">●</span>
+            <span className="inline-flex gap-1 font-mono">
+              <span className="typing-dot">▸</span>
+              <span className="typing-dot">▸</span>
+              <span className="typing-dot">▸</span>
             </span>
           )}
         </div>

@@ -38,35 +38,35 @@ export function TranscriptPanel({ analysisId }: { analysisId: string }) {
 
   return (
     <Card>
-      <CardHeader className="border-b border-border pb-4">
-        <div className="flex items-center justify-between">
+      <CardHeader className="border-b border-border/50 pb-4">
+        <div className="flex items-center justify-between gap-4">
           <CardTitle className="flex items-center gap-2 text-base">
             <FileText className="h-4 w-4 text-primary" />
             Transcripts
           </CardTitle>
-          <div className="flex gap-1 rounded-md bg-muted/50 p-1">
+          <div className="flex gap-1 rounded-lg border border-border/50 bg-muted/30 p-1 backdrop-blur-sm">
             {(["A", "B"] as VideoSlot[]).map((slot) => (
               <button
                 key={slot}
                 onClick={() => setActive(slot)}
                 className={cn(
-                  "rounded px-3 py-1 text-sm font-medium transition-colors",
+                  "rounded-md px-3 py-1 font-mono text-xs font-semibold transition-all duration-300",
                   active === slot
-                    ? "gradient-bg text-white"
+                    ? "nav-pill-active"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                Video {slot}
+                VID_{slot}
               </button>
             ))}
           </div>
         </div>
       </CardHeader>
 
-      <CardContent className="pt-4">
+      <CardContent className="pt-5">
         {loading && (
-          <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading transcripts…
+          <div className="flex items-center justify-center gap-2 py-12 font-mono text-xs text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin text-accent" /> LOADING_TRANSCRIPT…
           </div>
         )}
 
@@ -102,20 +102,24 @@ function TranscriptBody({
     }
     return (
       <div className="py-10 text-center text-sm text-muted-foreground">
+        <p className="sci-fi-label mb-2">No Signal</p>
         <p>No transcript available for this video.</p>
-        <p className="mt-1 text-xs text-[hsl(var(--warning))]">{note}</p>
+        <p className="mt-2 font-mono text-[10px] text-[hsl(var(--warning))]">{note}</p>
       </div>
     );
   }
 
   return (
-    <div className="scroll-thin max-h-[420px] space-y-2 overflow-y-auto pr-2">
+    <div className="scroll-thin max-h-[420px] space-y-1 overflow-y-auto pr-2">
       {transcript.segments.map((line, i) => (
-        <div key={i} className="flex gap-3 text-sm leading-relaxed">
-          <span className="shrink-0 select-none font-mono text-xs text-primary/80">
-            {line.timestamp}
+        <div
+          key={i}
+          className="group flex gap-4 rounded-lg px-2 py-2 text-sm leading-relaxed transition-colors hover:bg-muted/25"
+        >
+          <span className="shrink-0 select-none font-mono text-[11px] font-medium text-accent/90">
+            [{line.timestamp}]
           </span>
-          <span className="text-foreground/90">{line.text}</span>
+          <span className="text-foreground/90 selection:bg-accent/25">{line.text}</span>
         </div>
       ))}
     </div>

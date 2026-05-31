@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Play } from "lucide-react";
+import { Loader2, Play, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,9 +24,16 @@ export function UrlForm({
   };
 
   return (
-    <Card>
-      <CardContent className="pt-5">
-        <form onSubmit={submit} className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+    <Card className="gradient-border shadow-glow-sm">
+      <CardContent className="relative z-[1] pt-6">
+        <div className="mb-5 flex items-center gap-2">
+          <Radio className="h-4 w-4 text-accent animate-pulse-glow" />
+          <span className="sci-fi-label">Ingestion Protocol</span>
+        </div>
+        <form
+          onSubmit={submit}
+          className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end"
+        >
           <Field
             label="Video A"
             placeholder="https://youtube.com/watch?v=..."
@@ -34,6 +41,7 @@ export function UrlForm({
             onChange={setUrlA}
             disabled={loading}
             accent="text-violet-400"
+            glow="shadow-[0_0_20px_-6px_hsl(276_91%_66%/0.3)]"
           />
           <Field
             label="Video B"
@@ -42,16 +50,17 @@ export function UrlForm({
             onChange={setUrlB}
             disabled={loading}
             accent="text-cyan-400"
+            glow="shadow-[0_0_20px_-6px_hsl(187_92%_53%/0.3)]"
           />
           <Button
             type="submit"
             variant="gradient"
             disabled={loading || !urlA || !urlB}
-            className="md:mb-0"
+            className="md:mb-0 md:h-10"
           >
             {loading ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Analyzing…
+                <Loader2 className="h-4 w-4 animate-spin" /> Processing…
               </>
             ) : (
               <>
@@ -61,13 +70,13 @@ export function UrlForm({
           </Button>
         </form>
         {error && (
-          <p className="mt-3 rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-400">
+          <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-300 backdrop-blur-sm">
             {error}
           </p>
         )}
-        <p className="mt-3 text-xs text-muted-foreground">
-          Supports YouTube and Instagram Reels. Ingestion extracts metadata + transcript,
-          computes engagement, and indexes both videos for AI analysis.
+        <p className="mt-4 font-mono text-[11px] leading-relaxed text-muted-foreground/80">
+          <span className="text-accent/80">&gt;</span> Supports YouTube + Instagram Reels ·
+          extracts metadata, transcripts, visual frames, and indexes for RAG analysis.
         </p>
       </CardContent>
     </Card>
@@ -81,6 +90,7 @@ function Field({
   onChange,
   disabled,
   accent,
+  glow,
 }: {
   label: string;
   placeholder: string;
@@ -88,10 +98,11 @@ function Field({
   onChange: (v: string) => void;
   disabled: boolean;
   accent: string;
+  glow: string;
 }) {
   return (
     <div>
-      <label className={`mb-1.5 block text-xs font-semibold uppercase tracking-wide ${accent}`}>
+      <label className={`mb-2 block font-mono text-[10px] font-semibold uppercase tracking-[0.18em] ${accent}`}>
         {label}
       </label>
       <Input
@@ -100,6 +111,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
+        className={glow}
       />
     </div>
   );

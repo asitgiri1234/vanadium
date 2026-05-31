@@ -53,79 +53,82 @@ export function ComparisonBar({
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader className="border-b border-border/50 pb-4">
         <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-          <Sparkles className="h-4 w-4 text-primary" />
-          Comparison insights
+          <Sparkles className="h-4 w-4 text-primary shadow-glow-sm" />
+          <span>Comparison Insights</span>
           {comparison.winner && hasViews && (
-            <Badge variant="outline" className="ml-auto gap-1 border-violet-500/40 text-violet-300">
+            <Badge
+              variant="outline"
+              className="ml-auto gap-1 border-violet-500/40 bg-violet-500/10 text-violet-200"
+            >
               <Trophy className="h-3 w-3" />
-              Video {comparison.winner} leads by {comparison.engagement_delta} pts
+              Video {comparison.winner} +{comparison.engagement_delta} pts
             </Badge>
           )}
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-4">
+      <CardContent className="space-y-6 pt-5">
+        <div className="space-y-5">
           <Bar
             label="Video A"
             value={videoA.engagement_rate}
             width={widthA}
             hasViews={videoA.views > 0}
-            accent="from-violet-500 to-violet-400"
+            accent="from-violet-500 via-violet-400 to-fuchsia-400"
+            glow="violet"
           />
           <Bar
             label="Video B"
             value={videoB.engagement_rate}
             width={widthB}
             hasViews={videoB.views > 0}
-            accent="from-cyan-500 to-cyan-400"
+            accent="from-cyan-500 via-cyan-400 to-teal-400"
+            glow="cyan"
           />
         </div>
 
         {comparison.headline_insights.length > 0 && (
-          <ul className="space-y-1.5 border-t border-border pt-4 text-sm text-muted-foreground">
+          <ul className="space-y-2 border-t border-border/50 pt-5 text-sm text-muted-foreground">
             {comparison.headline_insights.map((insight, i) => (
-              <li key={i} className="flex gap-2">
-                <span className="text-primary">→</span>
-                <span>{insight}</span>
+              <li key={i} className="flex gap-3 rounded-lg border border-border/40 bg-muted/15 px-3 py-2">
+                <span className="font-mono text-xs text-accent">0{i + 1}</span>
+                <span className="text-foreground/85">{insight}</span>
               </li>
             ))}
           </ul>
         )}
 
         {comparison.ai_pending && !comparison.strategist_summary && !comparison.ai_error && (
-          <div className="flex items-center gap-2 border-t border-border pt-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            Generating AI strategist summary…
+            <span className="font-mono text-xs">AI_STRATEGIST :: generating narrative…</span>
           </div>
         )}
 
         {comparison.ai_error && (
-          <div className="border-t border-border pt-4">
-            <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+          <div className="border-t border-border/50 pt-5">
+            <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300 backdrop-blur-sm">
               AI comparison failed: {comparison.ai_error}
             </p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Check your LLM API key and provider in backend/.env, then restart the server.
+            <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+              Check LLM API key in backend/.env and restart the server.
             </p>
           </div>
         )}
 
         {comparison.strategist_summary && (
-          <div className="border-t border-border pt-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              AI strategist summary
-            </p>
-            <p className="rounded-lg border border-border bg-muted/30 p-4 text-sm leading-relaxed text-foreground/90">
+          <div className="border-t border-border/50 pt-5">
+            <p className="sci-fi-label mb-3">AI Strategist Summary</p>
+            <p className="rounded-xl border border-border/50 bg-muted/20 p-4 text-sm leading-relaxed text-foreground/90 backdrop-blur-sm selection:bg-accent/30">
               {comparison.strategist_summary}
             </p>
           </div>
         )}
 
         {comparison.recommendations.length > 0 && (
-          <div className="border-t border-border pt-4">
-            <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <div className="border-t border-border/50 pt-5">
+            <p className="mb-3 flex items-center gap-2 sci-fi-label">
               <Lightbulb className="h-3.5 w-3.5 text-primary" />
               Recommendations
             </p>
@@ -133,9 +136,11 @@ export function ComparisonBar({
               {comparison.recommendations.map((rec, i) => (
                 <li
                   key={i}
-                  className="flex gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-sm text-foreground/90"
+                  className="flex gap-3 rounded-lg border border-border/50 bg-muted/15 px-4 py-3 text-sm text-foreground/90 transition-colors hover:border-primary/25"
                 >
-                  <span className="text-gradient shrink-0 font-semibold">{i + 1}.</span>
+                  <span className="text-gradient shrink-0 font-mono text-xs font-bold">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
                   <span>{rec}</span>
                 </li>
               ))}
@@ -153,24 +158,31 @@ function Bar({
   width,
   hasViews,
   accent,
+  glow,
 }: {
   label: string;
   value: number;
   width: string;
   hasViews: boolean;
   accent: string;
+  glow: "violet" | "cyan";
 }) {
+  const glowClass =
+    glow === "violet"
+      ? "shadow-[0_0_20px_hsl(276_91%_66%/0.5)]"
+      : "shadow-[0_0_20px_hsl(187_92%_53%/0.5)]";
+
   return (
     <div>
-      <div className="mb-1 flex justify-between text-xs">
-        <span className="font-medium">{label}</span>
-        <span className={cn(hasViews ? "text-gradient font-semibold" : "text-muted-foreground")}>
+      <div className="mb-2 flex justify-between font-mono text-xs">
+        <span className="font-semibold tracking-wide text-foreground/90">{label}</span>
+        <span className={cn(hasViews ? "text-gradient font-bold" : "text-muted-foreground")}>
           {hasViews ? `${value}%` : "N/A"}
         </span>
       </div>
-      <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
+      <div className="bar-track">
         <div
-          className={cn("h-full rounded-full bg-gradient-to-r transition-all", accent)}
+          className={cn("bar-fill bg-gradient-to-r", accent, hasViews && glowClass)}
           style={{ width: hasViews ? width : "0%" }}
         />
       </div>
