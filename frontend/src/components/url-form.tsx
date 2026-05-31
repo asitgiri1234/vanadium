@@ -28,7 +28,7 @@ export function UrlForm({
       <CardContent className="relative z-[1] pt-6">
         <div className="mb-5 flex items-center gap-2">
           <Radio className="h-4 w-4 text-accent animate-pulse-glow" />
-          <span className="sci-fi-label">Ingestion Protocol</span>
+          <span className="sci-fi-label">Enter video URLs</span>
         </div>
         <form
           onSubmit={submit}
@@ -60,7 +60,8 @@ export function UrlForm({
           >
             {loading ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Processing…
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Analyzing… this may take 30s
               </>
             ) : (
               <>

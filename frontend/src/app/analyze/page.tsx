@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, Zap } from "lucide-react";
+import { Activity, Loader2, Zap } from "lucide-react";
 import { UrlForm } from "@/components/url-form";
 import { VideoCard } from "@/components/video-card";
 import { TranscriptPanel } from "@/components/transcript-panel";
@@ -74,6 +74,18 @@ export default function AnalyzePage() {
               videoA={snapshot.videos.A}
               videoB={snapshot.videos.B}
             />
+          </div>
+        )}
+
+        {!snapshot && loading && (
+          <div className="empty-state-panel mt-10">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-primary/30 bg-primary/10 shadow-glow-sm">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+            <p className="sci-fi-label mb-2 animate-pulse">Ingesting videos, running AI analysis…</p>
+            <p className="text-sm text-muted-foreground">
+              Transcription and visual analysis can take up to 30 seconds. Hang tight.
+            </p>
           </div>
         )}
 

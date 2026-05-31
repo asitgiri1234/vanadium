@@ -16,7 +16,7 @@ import {
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const GITHUB_URL = "https://github.com/asitgiri1234/vanadium";
+const GITHUB_URL = "#";
 const CONTACT_EMAIL = "hello@vanadium.app";
 
 const STATS = [
@@ -103,7 +103,7 @@ const FAQ = [
   },
   {
     q: "Do I need an API key?",
-    a: "The hosted version is pre-configured. If you're self-hosting, add your Groq or OpenAI API key to your environment variables.",
+    a: "The hosted version is pre-configured. If you're self-hosting, add your Groq or OpenAI API key to your environment variables as GROQ_API_KEY or OPENAI_API_KEY.",
   },
   {
     q: "How does Ask Vanadium work?",
@@ -111,7 +111,7 @@ const FAQ = [
   },
   {
     q: "Is my data stored?",
-    a: "Analyses are stored server-side so your session persists across page refreshes. Your content is only shared with the LLM provider (Groq/OpenAI) to generate the comparison — it is not sold or used for any other purpose.",
+    a: "Your analysis is stored server-side so sessions persist across refreshes. Video content is only sent to your chosen LLM provider (Groq or OpenAI) to generate the comparison — it is never sold or shared for any other purpose.",
   },
 ];
 
@@ -119,7 +119,7 @@ function MainNavLinks() {
   return (
     <>
       <Link href="/" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-        Home
+        ← Home
       </Link>
       <Link
         href="/#benefits"
@@ -202,9 +202,16 @@ export function HeroSection() {
         ))}
       </div>
 
-      <p className="mt-10 text-center font-mono text-[11px] text-muted-foreground/70">
-        {"// works with YouTube + Instagram · powered by Groq · RAG-backed chat"}
-      </p>
+      <div className="mt-10 flex flex-wrap items-center justify-center gap-2">
+        {["YouTube + Instagram", "Powered by Groq", "RAG-backed chat"].map((tag) => (
+          <span
+            key={tag}
+            className="rounded-full border border-border/50 bg-muted/20 px-3 py-1 font-mono text-[10px] text-muted-foreground"
+          >
+            {tag}
+          </span>
+        ))}
+      </div>
     </section>
   );
 }
@@ -217,8 +224,8 @@ export function BenefitsSection() {
           The problem — and the fix
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground md:text-base">
-          Creators don&apos;t need more metrics. They need a strategist that reads both videos
-          and tells them why one outperformed.
+          Creators are drowning in metrics but starving for strategy. Vanadium reads both
+          videos and tells you why one outperformed.
         </p>
       </div>
 
@@ -379,7 +386,7 @@ export function SiteFooter() {
               href="/privacy"
               className="text-muted-foreground transition-colors hover:text-foreground"
             >
-              Privacy Policy
+              Privacy
             </Link>
           </nav>
 
