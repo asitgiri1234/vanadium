@@ -1,15 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { Activity, ArrowLeft, Zap } from "lucide-react";
+import { Activity, Zap } from "lucide-react";
 import { UrlForm } from "@/components/url-form";
 import { VideoCard } from "@/components/video-card";
 import { TranscriptPanel } from "@/components/transcript-panel";
 import { VisualPanel } from "@/components/visual-panel";
 import { ComparisonBar } from "@/components/comparison-bar";
 import { ChatPanel } from "@/components/chat-panel";
-import { SectionLabel, SiteFooter, ToolHeader } from "@/components/landing";
+import { SectionLabel, SiteFooter, SiteHeader } from "@/components/landing";
 import { ingest } from "@/lib/api";
 import type { AnalysisSnapshot } from "@/lib/types";
 
@@ -34,27 +33,18 @@ export default function AnalyzePage() {
 
   return (
     <>
-      <ToolHeader />
+      <SiteHeader />
 
       <main className="mx-auto max-w-6xl px-4 py-10 md:px-6">
-        <div className="mb-8">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to home
-          </Link>
-          <div className="mt-6 text-center md:text-left">
-            <p className="sci-fi-label mb-2">Analysis Workspace</p>
-            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-              Paste two videos. Get the full breakdown.
-            </h1>
-            <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-              Drop a YouTube link and an Instagram Reel — Vanadium ingests both, runs the
-              comparison, and unlocks evidence-backed chat.
-            </p>
-          </div>
+        <div className="mb-8 text-center md:text-left">
+          <p className="sci-fi-label mb-2">Analysis Workspace</p>
+          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+            Paste two videos. Get the full breakdown.
+          </h1>
+          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+            Drop a YouTube link and an Instagram Reel — Vanadium ingests both, runs the
+            comparison, and unlocks evidence-backed chat.
+          </p>
         </div>
 
         <UrlForm onAnalyze={handleAnalyze} loading={loading} error={error} />

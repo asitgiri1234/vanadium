@@ -114,7 +114,7 @@ export function ComparisonBar({
               AI comparison failed: {comparison.ai_error}
             </p>
             <p className="mt-2 font-mono text-[10px] text-muted-foreground">
-              Check LLM API key in backend/.env and restart the server.
+              AI comparison is temporarily unavailable. Try again in a moment or contact support.
             </p>
           </div>
         )}

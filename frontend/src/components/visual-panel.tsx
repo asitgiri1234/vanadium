@@ -105,7 +105,7 @@ function VisualBody({
         <p className="sci-fi-label mb-2">Module Offline</p>
         <p>Visual analysis is turned off.</p>
         <p className="mt-2 font-mono text-[10px] text-[hsl(var(--warning))]">
-          Set ENABLE_VISUAL=true in backend/.env
+          Visual analysis is not enabled on this deployment.
         </p>
       </div>
     );
@@ -117,7 +117,7 @@ function VisualBody({
         <p className="sci-fi-label mb-2">Vision Unavailable</p>
         <p>LLM not configured for vision.</p>
         <p className="mt-2 font-mono text-[10px] text-[hsl(var(--warning))]">
-          Set GROQ_API_KEY or OPENAI_API_KEY in backend/.env
+          Vision AI is not configured on this deployment.
         </p>
       </div>
     );

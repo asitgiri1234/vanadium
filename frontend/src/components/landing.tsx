@@ -16,8 +16,11 @@ import {
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+const GITHUB_URL = "https://github.com/asitgiri1234/vanadium";
+const CONTACT_EMAIL = "hello@vanadium.app";
+
 const STATS = [
-  { value: "2 platforms", label: "YouTube + Instagram Reels supported" },
+  { value: "YouTube & Instagram", label: "Compare across both platforms" },
   { value: "Full stack", label: "Metadata · transcript · visual analysis" },
   { value: "Evidence-backed", label: "Every AI answer cites source chunks" },
 ];
@@ -62,37 +65,31 @@ const SOLUTIONS = [
 
 const FEATURES = [
   {
-    id: "01",
     icon: BarChart3,
     title: "Engagement breakdown",
     body: "Views, likes, comments, and engagement rate computed per video — winner highlighted instantly.",
   },
   {
-    id: "02",
     icon: FileText,
     title: "Transcript indexing",
     body: "YouTube captions or Whisper transcription for Reels. Chunked and embedded for semantic retrieval.",
   },
   {
-    id: "03",
     icon: Eye,
     title: "Visual scene analysis",
     body: "Vision AI reads scene context and on-screen text — critical for music-only or text-overlay reels.",
   },
   {
-    id: "04",
     icon: Brain,
     title: "LLM strategist summary",
     body: "Narrative comparison and actionable recommendations generated from metadata, transcripts, and visuals.",
   },
   {
-    id: "05",
     icon: MessageSquare,
     title: "Ask Vanadium chat",
     body: "Follow-up questions with RAG — the model sees retrieved evidence, not just your question.",
   },
   {
-    id: "06",
     icon: Sparkles,
     title: "Creator-first insights",
     body: "Hooks, CTAs, pacing, and format — explained the way a content strategist would, not a spreadsheet.",
@@ -106,7 +103,7 @@ const FAQ = [
   },
   {
     q: "Do I need an API key?",
-    a: "Yes — configure Groq (recommended) or OpenAI in backend/.env for AI comparison and chat. Ingest works without it for metadata and transcripts.",
+    a: "The hosted version is pre-configured. If you're self-hosting, add your Groq or OpenAI API key to your environment variables.",
   },
   {
     q: "How does Ask Vanadium work?",
@@ -114,9 +111,31 @@ const FAQ = [
   },
   {
     q: "Is my data stored?",
-    a: "Analyses persist locally on disk (backend/data/) so sessions survive restarts. Nothing is sent to third parties except your configured LLM provider.",
+    a: "Analyses are stored server-side so your session persists across page refreshes. Your content is only shared with the LLM provider (Groq/OpenAI) to generate the comparison — it is not sold or used for any other purpose.",
   },
 ];
+
+function MainNavLinks() {
+  return (
+    <>
+      <Link href="/" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+        Home
+      </Link>
+      <Link
+        href="/#benefits"
+        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        Benefits
+      </Link>
+      <Link
+        href="/#features"
+        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        Features
+      </Link>
+    </>
+  );
+}
 
 export function SiteHeader() {
   return (
@@ -133,15 +152,7 @@ export function SiteHeader() {
           <span className="text-gradient text-lg font-bold tracking-tight">Vanadium</span>
         </Link>
         <nav className="hidden items-center gap-8 sm:flex">
-          <a href="#benefits" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-            Benefits
-          </a>
-          <a href="#features" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-            Features
-          </a>
-          <Link href="/analyze" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-            Try it
-          </Link>
+          <MainNavLinks />
         </nav>
         <Link href="/analyze" className={cn(buttonVariants({ variant: "gradient", size: "sm" }))}>
           Analyze videos <ArrowRight className="h-3.5 w-3.5" />
@@ -151,38 +162,8 @@ export function SiteHeader() {
   );
 }
 
-export function ToolHeader() {
-  return (
-    <header className="sticky top-0 z-50 border-b border-border/40 bg-background/70 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 md:px-6">
-        <Link href="/" className="flex items-center gap-3">
-          <Image
-            src="/logo.png"
-            alt="Vanadium"
-            width={36}
-            height={36}
-            className="rounded-lg shadow-glow-sm ring-1 ring-white/10"
-          />
-          <span className="text-gradient text-lg font-bold tracking-tight">Vanadium</span>
-        </Link>
-        <nav className="hidden items-center gap-8 sm:flex">
-          <Link href="/" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-            Home
-          </Link>
-          <Link href="/#features" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-            Features
-          </Link>
-          <Link href="/#benefits" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-            Benefits
-          </Link>
-        </nav>
-        <Link href="/" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
-          ← Home
-        </Link>
-      </div>
-    </header>
-  );
-}
+/** @deprecated Use SiteHeader — kept for imports that haven't migrated. */
+export const ToolHeader = SiteHeader;
 
 export function HeroSection() {
   return (
@@ -215,7 +196,7 @@ export function HeroSection() {
             key={s.label}
             className="glass-panel rounded-xl px-5 py-4 text-center transition-transform hover:scale-[1.02]"
           >
-            <div className="text-gradient text-xl font-bold md:text-2xl">{s.value}</div>
+            <div className="text-gradient text-lg font-bold md:text-xl">{s.value}</div>
             <div className="mt-1 text-xs leading-snug text-muted-foreground">{s.label}</div>
           </div>
         ))}
@@ -230,7 +211,7 @@ export function HeroSection() {
 
 export function BenefitsSection() {
   return (
-    <section id="benefits" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-16 md:px-6">
+    <section id="benefits" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-16 md:px-6">
       <div className="mb-12 text-center">
         <h2 className="text-2xl font-bold tracking-tight md:text-3xl">
           The problem — and the fix
@@ -282,7 +263,7 @@ export function BenefitsSection() {
 
 export function FeaturesSection() {
   return (
-    <section id="features" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-16 md:px-6">
+    <section id="features" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-16 md:px-6">
       <div className="mb-12 text-center">
         <h2 className="text-2xl font-bold tracking-tight md:text-3xl">Features</h2>
         <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground md:text-base">
@@ -293,13 +274,10 @@ export function FeaturesSection() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {FEATURES.map((f) => (
           <div
-            key={f.id}
+            key={f.title}
             className="glass-panel group rounded-xl p-5 transition-all duration-300 hover:border-primary/30 hover:shadow-glow-sm"
           >
-            <div className="mb-3 flex items-center justify-between">
-              <span className="font-mono text-[10px] text-muted-foreground">
-                feature_{f.id} →
-              </span>
+            <div className="mb-3 flex justify-end">
               <f.icon className="h-4 w-4 text-primary opacity-70 transition-opacity group-hover:opacity-100" />
             </div>
             <h3 className="font-semibold text-foreground">{f.title}</h3>
@@ -370,20 +348,48 @@ export function FaqSection() {
 export function SiteFooter() {
   return (
     <footer className="border-t border-border/40 bg-card/30">
-      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-10 md:flex-row md:px-6">
-        <div className="flex items-center gap-2">
-          <Image src="/logo.png" alt="" width={28} height={28} className="rounded-md" />
-          <span className="text-sm font-semibold">Vanadium</span>
-        </div>
-        <p className="text-center text-xs text-muted-foreground md:text-left">
-          AI content intelligence · evidence-backed video comparison · RAG chat for creators
-        </p>
-        <div className="flex gap-4 font-mono text-[10px] text-muted-foreground">
-          <span className="text-accent">RAG</span>
-          <span>·</span>
-          <span className="text-primary">Groq</span>
-          <span>·</span>
-          <span>YouTube + IG</span>
+      <div className="mx-auto max-w-6xl px-4 py-10 md:px-6">
+        <div className="flex flex-col items-center justify-between gap-6 md:flex-row md:items-start">
+          <div className="flex flex-col items-center gap-2 md:items-start">
+            <div className="flex items-center gap-2">
+              <Image src="/logo.png" alt="" width={28} height={28} className="rounded-md" />
+              <span className="text-sm font-semibold">Vanadium</span>
+            </div>
+            <p className="max-w-xs text-center text-xs text-muted-foreground md:text-left">
+              AI content intelligence · evidence-backed video comparison · RAG chat for creators
+            </p>
+          </div>
+
+          <nav className="flex flex-wrap items-center justify-center gap-6 text-sm">
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              GitHub
+            </a>
+            <a
+              href={`mailto:${CONTACT_EMAIL}`}
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Contact
+            </a>
+            <Link
+              href="/privacy"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Privacy Policy
+            </Link>
+          </nav>
+
+          <div className="flex gap-4 font-mono text-[10px] text-muted-foreground">
+            <span className="text-accent">RAG</span>
+            <span>·</span>
+            <span className="text-primary">Groq</span>
+            <span>·</span>
+            <span>YouTube + IG</span>
+          </div>
         </div>
       </div>
     </footer>
