@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -27,6 +28,7 @@ class TranscriptService:
     def __init__(self) -> None:
         # Cached Whisper model (loaded lazily on first Instagram transcription).
         self._whisper_model = None
+        self._whisper_lock = threading.Lock()
 
     def fetch(self, url: str, platform: Platform) -> list[TranscriptSegment]:
         try:
@@ -124,11 +126,14 @@ class TranscriptService:
 
     def _load_whisper_model(self):
         """Load (and cache) the Whisper model so it isn't reloaded per request."""
-        if self._whisper_model is None:
-            import whisper  # type: ignore
+        if self._whisper_model is not None:
+            return self._whisper_model
+        with self._whisper_lock:
+            if self._whisper_model is None:
+                import whisper  # type: ignore
 
-            logger.info("Loading Whisper model '%s'…", settings.whisper_model)
-            self._whisper_model = whisper.load_model(settings.whisper_model)
+                logger.info("Loading Whisper model '%s'…", settings.whisper_model)
+                self._whisper_model = whisper.load_model(settings.whisper_model)
         return self._whisper_model
 
     def _transcribe_whisper(self, audio_path: str) -> list[TranscriptSegment]:

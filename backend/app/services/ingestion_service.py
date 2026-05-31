@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.core.warmup import warmup_heavy_dependencies
 from app.models.schemas import (
     AnalysisSnapshot,
     Platform,
@@ -53,6 +54,8 @@ class IngestionService:
 
         analysis_id = uuid.uuid4().hex[:10]
         logger.info("Starting ingest %s", analysis_id)
+
+        warmup_heavy_dependencies()
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             fut_a = pool.submit(self._process_video, analysis_id, "A", video_a_url)

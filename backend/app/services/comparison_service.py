@@ -9,8 +9,7 @@ visual analysis.
 
 from __future__ import annotations
 
-import json
-import re
+from typing import Any
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -21,6 +20,7 @@ from app.models.schemas import (
     VideoSlot,
     VideoVisual,
 )
+from app.utils.llm_utils import content_to_text, parse_json_object
 from app.utils.text import clean_text, first_n_seconds_text, has_cta, keywords
 
 logger = get_logger(__name__)
@@ -131,6 +131,7 @@ class ComparisonService:
                     "strategist_summary": summary,
                     "recommendations": recommendations,
                     "ai_pending": False,
+                    "ai_error": "",
                 }
             )
 
@@ -139,6 +140,7 @@ class ComparisonService:
                 "strategist_summary": summary,
                 "recommendations": recommendations,
                 "ai_pending": False,
+                "ai_error": "",
             }
         )
 
@@ -273,7 +275,9 @@ Respond with valid JSON only (no markdown fences):
   "recommendations": ["3-5 specific actionable tips for improving future content, referencing what worked in the stronger video"]
 }}"""
 
-            llm = get_text_llm(temperature=0.4)
+            llm = get_text_llm(temperature=0.4).bind(
+                response_format={"type": "json_object"}
+            )
             resp = llm.invoke([
                 SystemMessage(content=(
                     "You are Vanadium, an expert AI content strategist. "
@@ -282,9 +286,11 @@ Respond with valid JSON only (no markdown fences):
                 )),
                 HumanMessage(content=user_content),
             ])
-            raw = clean_text(getattr(resp, "content", "") or "")
-            summary, recommendations = self._parse_llm_json(raw)
+            summary, recommendations = self._parse_llm_json(
+                getattr(resp, "content", None)
+            )
             if not summary and not recommendations:
+                raw = content_to_text(getattr(resp, "content", None))
                 raise ValueError(f"LLM returned empty comparison: {raw[:120]}")
             return summary, recommendations
         except Exception as exc:  # noqa: BLE001
@@ -292,25 +298,21 @@ Respond with valid JSON only (no markdown fences):
             raise
 
     @staticmethod
-    def _parse_llm_json(raw: str) -> tuple[str, list[str]]:
+    def _parse_llm_json(raw: Any) -> tuple[str, list[str]]:
         """Extract summary + recommendations from LLM JSON output."""
-        text = raw.strip()
-        # Strip optional ```json fences.
-        if text.startswith("```"):
-            text = re.sub(r"^```(?:json)?\s*", "", text)
-            text = re.sub(r"\s*```$", "", text)
-        try:
-            data = json.loads(text)
-            summary = clean_text(str(data.get("summary", "")))
-            recs = data.get("recommendations") or []
-            if isinstance(recs, list):
-                recommendations = [clean_text(str(r)) for r in recs if str(r).strip()]
-            else:
-                recommendations = []
-            return summary, recommendations
-        except json.JSONDecodeError:
-            logger.warning("Could not parse LLM comparison JSON")
-            return raw[:1200], []
+        data = parse_json_object(raw)
+        summary = clean_text(str(data.get("summary", "")))
+        recs = data.get("recommendations") or []
+        if isinstance(recs, list):
+            recommendations = [clean_text(str(r)) for r in recs if str(r).strip()]
+        else:
+            recommendations = []
+        if not summary and not recommendations:
+            raise ValueError(
+                f"LLM JSON missing summary and recommendations: "
+                f"{content_to_text(raw)[:200]!r}"
+            )
+        return summary, recommendations
 
 
 comparison_service = ComparisonService()

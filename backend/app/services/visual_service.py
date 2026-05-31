@@ -10,16 +10,16 @@ OCR (Tesseract) is optional fallback only when ENABLE_OCR=true and no API key.
 from __future__ import annotations
 
 import base64
-import json
 import os
-import re
 import shutil
 import subprocess
 import tempfile
+from typing import Any
 
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.schemas import Platform, VisualFrame
+from app.utils.llm_utils import content_to_text, parse_json_object
 from app.utils.text import clean_text, format_timestamp
 from app.utils.ytdlp import apply_cookie_options
 
@@ -196,26 +196,25 @@ class VisualService:
                     }
                 )
 
-            llm = get_vision_llm(temperature=0.2)
+            llm = get_vision_llm(temperature=0.2).bind(
+                response_format={"type": "json_object"}
+            )
             resp = llm.invoke([HumanMessage(content=content)])
-            return self._parse_vision_json(getattr(resp, "content", "") or "")
+            return self._parse_vision_json(getattr(resp, "content", None))
         except Exception as exc:  # noqa: BLE001
             logger.exception("Vision analysis failed: %s", exc)
             return "", ""
 
     @staticmethod
-    def _parse_vision_json(raw: str) -> tuple[str, str]:
-        text = raw.strip()
-        if text.startswith("```"):
-            text = re.sub(r"^```(?:json)?\s*", "", text)
-            text = re.sub(r"\s*```$", "", text)
+    def _parse_vision_json(raw: Any) -> tuple[str, str]:
         try:
-            data = json.loads(text)
+            data = parse_json_object(raw)
             return (
                 clean_text(str(data.get("description", ""))),
                 clean_text(str(data.get("on_screen_text", ""))),
             )
-        except json.JSONDecodeError:
+        except ValueError:
+            text = content_to_text(raw)
             return clean_text(text[:800]), ""
 
 

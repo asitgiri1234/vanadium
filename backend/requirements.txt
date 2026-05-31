@@ -16,6 +16,7 @@ openai>=1.30
 
 # --- Vector store ---
 chromadb>=0.5
+numpy>=2.0,<2.5
 
 # --- Transcript / metadata extraction ---
 youtube-transcript-api>=0.6.2

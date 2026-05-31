@@ -73,6 +73,7 @@ class ChatService:
         from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
         from app.services.llm_service import get_text_llm
+        from app.utils.llm_utils import content_to_text
 
         llm = get_text_llm(temperature=0.3, streaming=True)
 
@@ -84,8 +85,18 @@ class ChatService:
                 messages.append(AIMessage(content=turn.content))
         messages.append(HumanMessage(content=user_prompt))
 
+        emitted = False
         async for chunk in llm.astream(messages):
-            text = getattr(chunk, "content", "") or ""
+            text = content_to_text(getattr(chunk, "content", None))
+            if text:
+                emitted = True
+                yield text
+
+        # Groq/LangChain may return empty stream chunks — fall back to invoke.
+        if not emitted:
+            fallback = get_text_llm(temperature=0.3, streaming=False)
+            resp = await fallback.ainvoke(messages)
+            text = content_to_text(getattr(resp, "content", None))
             if text:
                 yield text
 
