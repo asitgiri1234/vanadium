@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { thumbnailSrc } from "@/lib/api";
 import type { VideoMetadata } from "@/lib/types";
-import { cn, formatNumber } from "@/lib/utils";
+import { cn, formatMetricValue, formatNumber } from "@/lib/utils";
 
 function formatDuration(seconds: number): string {
   if (!seconds) return "—";
@@ -51,6 +51,10 @@ export function VideoCard({ video }: { video: VideoMetadata }) {
   }, [video.thumbnail, video.platform]);
 
   const viewsKnown = video.views > 0;
+  const likesKnown = video.likes !== null && video.likes !== undefined && video.likes >= 0;
+  const commentsKnown =
+    video.comments !== null && video.comments !== undefined && video.comments >= 0;
+  const engagementKnown = viewsKnown && likesKnown;
   const isA = video.video_id === "A";
   const accentGlow = isA
     ? "shadow-[0_0_40px_-12px_hsl(276_91%_66%/0.35)] ring-violet-500/30"
@@ -85,8 +89,19 @@ export function VideoCard({ video }: { video: VideoMetadata }) {
       <CardHeader className="pb-3">
         <h3 className="line-clamp-2 text-base font-semibold leading-snug">{video.title}</h3>
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Users className="h-3.5 w-3.5 text-primary/70" />
-          <span>{video.creator}</span>
+          <Users className="h-3.5 w-3.5 shrink-0 text-primary/70" />
+          {video.creator_url ? (
+            <a
+              href={video.creator_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-primary/90 transition-colors hover:text-primary hover:underline"
+            >
+              {video.creator}
+            </a>
+          ) : (
+            <span>{video.creator}</span>
+          )}
           {video.follower_count > 0 && (
             <span className="font-mono text-xs">
               · {formatNumber(video.follower_count)} followers
@@ -98,24 +113,24 @@ export function VideoCard({ video }: { video: VideoMetadata }) {
       <CardContent className="space-y-4">
         <div className="engagement-orb">
           <div className="text-4xl font-extrabold tracking-tight">
-            {viewsKnown ? (
+            {engagementKnown ? (
               <span className="text-gradient">{video.engagement_rate}%</span>
             ) : (
               <span className="text-muted-foreground">N/A</span>
             )}
           </div>
           <div className="sci-fi-label mt-1">Engagement Rate</div>
-          {!viewsKnown && (
+          {!engagementKnown && (
             <div className="mt-2 font-mono text-[10px] text-[hsl(var(--warning))]">
-              Views unavailable · {video.platform}
+              {!viewsKnown ? `Views unavailable · ${video.platform}` : "Likes hidden · instagram"}
             </div>
           )}
         </div>
 
         <div className="grid grid-cols-3 gap-2">
-          <Metric icon={Eye} label="Views" value={viewsKnown ? formatNumber(video.views) : "—"} />
-          <Metric icon={Heart} label="Likes" value={formatNumber(video.likes)} />
-          <Metric icon={MessageCircle} label="Comments" value={formatNumber(video.comments)} />
+          <Metric icon={Eye} label="Views" value={viewsKnown ? formatMetricValue(video.views) : "—"} />
+          <Metric icon={Heart} label="Likes" value={formatMetricValue(video.likes)} />
+          <Metric icon={MessageCircle} label="Comments" value={formatMetricValue(video.comments)} />
         </div>
 
         <div className="grid grid-cols-2 gap-2">

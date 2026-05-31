@@ -37,7 +37,7 @@ def _metadata_block(v: VideoMetadata) -> str:
         f"Video {v.video_id} ({v.platform.value})\n"
         f"  title: {v.title}\n"
         f"  creator: {v.creator} (followers: {v.follower_count:,})\n"
-        f"  views: {v.views:,} | likes: {v.likes:,} | comments: {v.comments:,}\n"
+        f"  views: {v.views:,} | likes: {v.likes if v.likes is not None else 'unavailable'} | comments: {v.comments if v.comments is not None else 'unavailable'}\n"
         f"  engagement_rate: {v.engagement_rate}%\n"
         f"  duration: {v.duration_seconds}s | uploaded: {v.upload_date or 'unknown'}\n"
         f"  hashtags: {tags}\n"
@@ -78,12 +78,15 @@ def _performance_ranking(
     else:
         lines.append("  views: unavailable or not reported for one/both videos")
 
-    if a.likes > b.likes:
-        lines.append(f"  likes leader: Video A ({a.likes:,} vs {b.likes:,})")
-    elif b.likes > a.likes:
-        lines.append(f"  likes leader: Video B ({b.likes:,} vs {a.likes:,})")
+    if a.likes is not None and b.likes is not None:
+        if a.likes > b.likes:
+            lines.append(f"  likes leader: Video A ({a.likes:,} vs {b.likes:,})")
+        elif b.likes > a.likes:
+            lines.append(f"  likes leader: Video B ({b.likes:,} vs {a.likes:,})")
+        else:
+            lines.append(f"  likes: tied ({a.likes:,} each)")
     else:
-        lines.append(f"  likes: tied ({a.likes:,} each)")
+        lines.append("  likes: unavailable or hidden on one/both videos")
 
     if winner:
         weaker = "B" if winner == "A" else "A"

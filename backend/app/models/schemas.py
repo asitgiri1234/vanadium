@@ -32,12 +32,13 @@ class VideoMetadata(BaseModel):
 
     title: str = "Unknown title"
     creator: str = "Unknown creator"
+    creator_url: Optional[str] = None
     follower_count: int = 0
 
     thumbnail: Optional[str] = None
     views: int = 0
-    likes: int = 0
-    comments: int = 0
+    likes: Optional[int] = None
+    comments: Optional[int] = None
     duration_seconds: int = 0
     upload_date: Optional[str] = None  # ISO date string
     hashtags: list[str] = Field(default_factory=list)
@@ -54,12 +55,14 @@ class VideoMetadata(BaseModel):
         what is their follower count?" can retrieve it.
         """
         tags = ", ".join(self.hashtags) if self.hashtags else "none"
+        likes = f"{self.likes:,}" if self.likes is not None else "unavailable"
+        comments = f"{self.comments:,}" if self.comments is not None else "unavailable"
         return (
             f"Video {self.video_id} ({self.platform.value}). "
             f"Title: {self.title}. "
             f"Creator: {self.creator} with {self.follower_count:,} followers. "
-            f"Views: {self.views:,}. Likes: {self.likes:,}. "
-            f"Comments: {self.comments:,}. "
+            f"Views: {self.views:,}. Likes: {likes}. "
+            f"Comments: {comments}. "
             f"Engagement rate: {self.engagement_rate}%. "
             f"Duration: {self.duration_seconds} seconds. "
             f"Uploaded: {self.upload_date or 'unknown'}. "

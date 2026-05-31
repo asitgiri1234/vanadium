@@ -140,6 +140,7 @@ class IngestionService:
             url=url,
             title=raw.title,
             creator=raw.creator,
+            creator_url=raw.creator_url,
             follower_count=raw.follower_count,
             thumbnail=raw.thumbnail,
             views=raw.views,

@@ -7,11 +7,12 @@ export interface VideoMetadata {
   url: string;
   title: string;
   creator: string;
+  creator_url?: string | null;
   follower_count: number;
   thumbnail: string | null;
   views: number;
-  likes: number;
-  comments: number;
+  likes: number | null;
+  comments: number | null;
   duration_seconds: number;
   upload_date: string | null;
   hashtags: string[];

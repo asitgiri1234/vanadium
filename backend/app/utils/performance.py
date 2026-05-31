@@ -5,12 +5,16 @@ from __future__ import annotations
 from app.models.schemas import VideoMetadata, VideoSlot
 
 
+def _likes_known(v: VideoMetadata) -> bool:
+    return v.likes is not None
+
+
 def determine_winner(a: VideoMetadata, b: VideoMetadata) -> VideoSlot | None:
     """Pick the stronger video: higher views when both reported, otherwise likes."""
     if a.views > 0 and b.views > 0 and a.views != b.views:
         return "A" if a.views > b.views else "B"
-    if a.likes != b.likes:
-        return "A" if a.likes > b.likes else "B"
+    if _likes_known(a) and _likes_known(b) and a.likes != b.likes:
+        return "A" if (a.likes or 0) > (b.likes or 0) else "B"
     return None
 
 
@@ -23,7 +27,9 @@ def performance_delta(
     hi, lo = (a, b) if winner == "A" else (b, a)
     if a.views > 0 and b.views > 0 and a.views != b.views:
         return float(hi.views - lo.views)
-    return float(hi.likes - lo.likes)
+    if hi.likes is not None and lo.likes is not None:
+        return float(hi.likes - lo.likes)
+    return 0.0
 
 
 def winner_lead_summary(
@@ -32,12 +38,14 @@ def winner_lead_summary(
     if winner is None:
         return "Both videos show comparable views and likes."
     hi, lo = (a, b) if winner == "A" else (b, a)
+    hi_likes = f"{hi.likes:,}" if hi.likes is not None else "hidden"
+    lo_likes = f"{lo.likes:,}" if lo.likes is not None else "hidden"
     if a.views > 0 and b.views > 0 and a.views != b.views:
         return (
             f"Video {winner} leads on views ({hi.views:,} vs {lo.views:,}) "
-            f"and likes ({hi.likes:,} vs {lo.likes:,})."
+            f"and likes ({hi_likes} vs {lo_likes})."
         )
-    return f"Video {winner} leads on likes ({hi.likes:,} vs {lo.likes:,})."
+    return f"Video {winner} leads on likes ({hi_likes} vs {lo_likes})."
 
 
 def winner_decided_by_views(a: VideoMetadata, b: VideoMetadata) -> bool:

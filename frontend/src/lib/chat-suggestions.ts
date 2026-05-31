@@ -1,5 +1,9 @@
 import type { VideoMetadata, VideoSlot } from "./types";
 
+function likesKnown(v: VideoMetadata): boolean {
+  return v.likes !== null && v.likes !== undefined && v.likes >= 0;
+}
+
 /** Same rules as backend: views when both known, otherwise likes. */
 export function determinePerformanceWinner(
   videoA: VideoMetadata,
@@ -8,8 +12,8 @@ export function determinePerformanceWinner(
   if (videoA.views > 0 && videoB.views > 0 && videoA.views !== videoB.views) {
     return videoA.views > videoB.views ? "A" : "B";
   }
-  if (videoA.likes !== videoB.likes) {
-    return videoA.likes > videoB.likes ? "A" : "B";
+  if (likesKnown(videoA) && likesKnown(videoB) && videoA.likes !== videoB.likes) {
+    return (videoA.likes as number) > (videoB.likes as number) ? "A" : "B";
   }
   return null;
 }
@@ -33,8 +37,11 @@ export function performanceLeadLabel(
     const viewGap = hi.views - lo.views;
     return `+${viewGap.toLocaleString()} views`;
   }
-  const likeGap = hi.likes - lo.likes;
-  return `+${likeGap.toLocaleString()} likes`;
+  if (likesKnown(hi) && likesKnown(lo)) {
+    const likeGap = (hi.likes as number) - (lo.likes as number);
+    return `+${likeGap.toLocaleString()} likes`;
+  }
+  return "leading";
 }
 
 /** Chat suggestion chips — always derived from live video metrics, not stale labels. */

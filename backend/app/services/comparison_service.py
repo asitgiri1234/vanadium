@@ -27,11 +27,14 @@ from app.utils.text import clean_text, first_n_seconds_text, has_cta, keywords
 logger = get_logger(__name__)
 
 
-def compute_engagement_rate(likes: int, comments: int, views: int) -> float:
+def compute_engagement_rate(
+    likes: int | None, comments: int | None, views: int
+) -> float:
     """engagement_rate = ((likes + comments) / views) * 100."""
-    if views <= 0:
+    if views <= 0 or likes is None:
         return 0.0
-    return round(((likes + comments) / views) * 100, 2)
+    comment_count = comments if comments is not None else 0
+    return round(((likes + comment_count) / views) * 100, 2)
 
 
 def _segments_to_pairs(segments: list[TranscriptSegment]) -> list[tuple[str, float]]:

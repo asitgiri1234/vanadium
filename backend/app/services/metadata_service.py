@@ -24,11 +24,12 @@ class RawMetadata:
     platform: Platform
     title: str = "Unknown title"
     creator: str = "Unknown creator"
+    creator_url: str | None = None
     follower_count: int = 0
     thumbnail: Optional[str] = None
     views: int = 0
-    likes: int = 0
-    comments: int = 0
+    likes: int | None = None
+    comments: int | None = None
     duration_seconds: int = 0
     upload_date: Optional[str] = None
     hashtags: list[str] = field(default_factory=list)
@@ -43,6 +44,42 @@ def _as_int(value: Any) -> int:
         return int(value) if value is not None else 0
     except (TypeError, ValueError):
         return 0
+
+
+def _as_metric_int(value: Any) -> int | None:
+    """Parse engagement counts; None when hidden (yt-dlp often returns -1 for IG)."""
+    if value is None:
+        return None
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    if n < 0:
+        return None
+    return n
+
+
+def _creator_profile_url(info: dict[str, Any], platform: Platform) -> str | None:
+    """Best-effort profile/channel link for the uploader."""
+    direct = info.get("uploader_url") or info.get("channel_url")
+    if direct:
+        return str(direct)
+
+    if platform == Platform.instagram:
+        handle = info.get("uploader_id") or info.get("channel")
+        if handle:
+            return f"https://www.instagram.com/{str(handle).lstrip('@')}/"
+
+    if platform == Platform.youtube:
+        channel_id = info.get("channel_id")
+        if channel_id:
+            return f"https://www.youtube.com/channel/{channel_id}"
+        handle = info.get("uploader_id") or info.get("channel")
+        if handle:
+            clean = str(handle).lstrip("@")
+            return f"https://www.youtube.com/@{clean}"
+
+    return None
 
 
 def _format_upload_date(raw_date: Any) -> Optional[str]:
@@ -110,11 +147,12 @@ class MetadataService:
             platform=platform,
             title=info.get("title") or "Unknown title",
             creator=creator,
+            creator_url=_creator_profile_url(info, platform),
             follower_count=follower_count,
             thumbnail=info.get("thumbnail"),
             views=views,
-            likes=_as_int(info.get("like_count")),
-            comments=_as_int(info.get("comment_count")),
+            likes=_as_metric_int(info.get("like_count")),
+            comments=_as_metric_int(info.get("comment_count")),
             duration_seconds=_as_int(info.get("duration")),
             upload_date=_format_upload_date(info.get("upload_date")),
             hashtags=hashtags,
