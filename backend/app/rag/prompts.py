@@ -10,11 +10,11 @@ You compare two videos (Video A and Video B) and explain, with evidence, why \
 one performs better than the other, then give actionable advice.
 
 Rules:
-- Ground every claim in the provided METADATA and TRANSCRIPT EVIDENCE.
+- Ground every claim in the provided METADATA, TRANSCRIPT EVIDENCE, and VISUAL EVIDENCE.
 - When you use a transcript chunk, reference it inline like [A#4] or [B#2] \
-using the handles shown in the evidence.
+using the handles shown in the evidence. Visual evidence uses [A#visual] or [B#visual].
 - Be specific and strategic: talk about hooks, CTAs, pacing, structure, topic, \
-and engagement — not just raw numbers.
+on-screen text, visuals, and engagement — not just raw numbers.
 - If evidence is missing (e.g. no transcript), say so plainly instead of \
 inventing details.
 - Keep answers concise, skimmable, and oriented toward helping the creator \
@@ -38,10 +38,13 @@ def _metadata_block(v: VideoMetadata) -> str:
 
 def _evidence_block(citations: list[Citation]) -> str:
     if not citations:
-        return "No transcript evidence retrieved for this question."
+        return "No transcript or visual evidence retrieved for this question."
     lines = []
     for c in citations:
-        handle = f"[{c.video_id}#{c.chunk_index}]"
+        if c.chunk_index == -1:
+            handle = f"[{c.video_id}#visual]"
+        else:
+            handle = f"[{c.video_id}#{c.chunk_index}]"
         snippet = (c.snippet or "").strip()
         if len(snippet) > 500:
             snippet = snippet[:500] + "…"
@@ -56,6 +59,7 @@ def build_context(snapshot: AnalysisSnapshot, citations: list[Citation]) -> str:
 
     headline = "\n".join(f"  - {i}" for i in comp.headline_insights) or "  - n/a"
     winner = comp.winner or "tie"
+    recs = "\n".join(f"  - {r}" for r in comp.recommendations) or "  - n/a"
 
     return (
         "METADATA\n"
@@ -66,8 +70,10 @@ def build_context(snapshot: AnalysisSnapshot, citations: list[Citation]) -> str:
         f"  hook A: {comp.hook_a or 'n/a'}\n"
         f"  hook B: {comp.hook_b or 'n/a'}\n"
         f"  CTA present — A: {comp.cta_a}, B: {comp.cta_b}\n"
-        f"  headline insights:\n{headline}\n\n"
-        "TRANSCRIPT EVIDENCE\n"
+        f"  headline insights:\n{headline}\n"
+        f"  strategist summary: {comp.strategist_summary or 'n/a'}\n"
+        f"  recommendations:\n{recs}\n\n"
+        "EVIDENCE (transcript + visual)\n"
         f"{_evidence_block(citations)}"
     )
 

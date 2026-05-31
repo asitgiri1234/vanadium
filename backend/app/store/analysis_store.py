@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.models.schemas import (
     AnalysisSnapshot,
     ChatTurn,
+    ComparisonInsights,
     TranscriptSegment,
     VideoSlot,
     VideoVisual,
@@ -31,6 +32,17 @@ class AnalysisStore:
     def save(self, snapshot: AnalysisSnapshot) -> None:
         with self._lock:
             self._snapshots[snapshot.analysis_id] = snapshot
+
+    def update_comparison(
+        self, analysis_id: str, comparison: ComparisonInsights
+    ) -> None:
+        with self._lock:
+            snap = self._snapshots.get(analysis_id)
+            if snap is None:
+                return
+            self._snapshots[analysis_id] = snap.model_copy(
+                update={"comparison": comparison}
+            )
 
     def get(self, analysis_id: str) -> AnalysisSnapshot | None:
         with self._lock:

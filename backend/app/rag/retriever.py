@@ -31,6 +31,7 @@ class Retriever:
                     analysis_id=analysis_id,
                     video_id=slot,  # type: ignore[arg-type]
                     top_k=k,
+                    record_types=["transcript", "visual"],
                 )
             )
 
@@ -41,6 +42,7 @@ class Retriever:
                 analysis_id=analysis_id,
                 video_id=None,
                 top_k=k * 2,
+                record_types=["transcript", "visual"],
             )
 
         return self._dedupe(citations)

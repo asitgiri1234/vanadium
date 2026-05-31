@@ -28,6 +28,9 @@ export interface ComparisonInsights {
   hook_b: string;
   cta_a: boolean;
   cta_b: boolean;
+  strategist_summary: string;
+  recommendations: string[];
+  ai_pending: boolean;
 }
 
 export interface AnalysisSnapshot {
@@ -75,6 +78,7 @@ export interface VideoVisual {
   available: boolean;
   frames: VisualFrame[];
   visual_summary: string;
+  on_screen_text: string;
 }
 
 export interface VisualResponse {

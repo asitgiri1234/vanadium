@@ -110,7 +110,7 @@ export function ChatPanel({ analysisId }: { analysisId: string }) {
             onChange={(e) => setInput(e.target.value)}
             disabled={streaming}
           />
-          <Button type="submit" size="icon" disabled={streaming || !input.trim()}>
+          <Button type="submit" variant="gradient" size="icon" disabled={streaming || !input.trim()}>
             <Send className="h-4 w-4" />
           </Button>
         </form>

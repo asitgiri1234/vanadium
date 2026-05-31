@@ -116,6 +116,9 @@ class ComparisonInsights(BaseModel):
     hook_b: str = ""
     cta_a: bool = False
     cta_b: bool = False
+    strategist_summary: str = ""  # LLM narrative comparison (when OpenAI configured)
+    recommendations: list[str] = Field(default_factory=list)  # actionable tips
+    ai_pending: bool = False  # True while background LLM comparison is running
 
 
 class AnalysisSnapshot(BaseModel):
@@ -172,6 +175,7 @@ class VideoVisual(BaseModel):
     available: bool = False
     frames: list[VisualFrame] = Field(default_factory=list)
     visual_summary: str = ""  # scene description from the vision LLM (if enabled)
+    on_screen_text: str = ""  # text overlays read by the vision LLM
 
 
 class VisualResponse(BaseModel):

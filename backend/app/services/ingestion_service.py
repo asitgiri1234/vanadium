@@ -4,14 +4,16 @@ Coordinates the full pipeline for both videos:
 
     metadata → transcript → engagement → chunk → embed → index → compare
 
-Returns an :class:`AnalysisSnapshot` and persists it (plus the vectors) so the
-dashboard and RAG chat can use it. Each video is processed independently and
-defensively; a failure on one field never aborts the whole ingest.
+Videos A and B are processed in parallel. The LLM strategist comparison runs
+in a background thread so the API returns quickly with rule-based insights;
+the AI summary fills in within a few seconds via polling.
 """
 
 from __future__ import annotations
 
+import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -52,20 +54,20 @@ class IngestionService:
         analysis_id = uuid.uuid4().hex[:10]
         logger.info("Starting ingest %s", analysis_id)
 
-        meta_a, segs_a, vis_a = self._process_video(analysis_id, "A", video_a_url)
-        meta_b, segs_b, vis_b = self._process_video(analysis_id, "B", video_b_url)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            fut_a = pool.submit(self._process_video, analysis_id, "A", video_a_url)
+            fut_b = pool.submit(self._process_video, analysis_id, "B", video_b_url)
+            meta_a, segs_a, vis_a = fut_a.result()
+            meta_b, segs_b, vis_b = fut_b.result()
 
-        # Persist both videos' metadata as retrievable records in the vector DB.
         videos: dict[VideoSlot, VideoMetadata] = {"A": meta_a, "B": meta_b}
         self._store_metadata(analysis_id, videos)
-
-        # Keep the raw transcript segments so the full transcript can be shown.
         analysis_store.save_transcripts(analysis_id, {"A": segs_a, "B": segs_b})
-
-        # Keep the per-video visual analysis (OCR + scene summary) for display.
         analysis_store.save_visuals(analysis_id, {"A": vis_a, "B": vis_b})
 
-        comparison = comparison_service.build_insights(meta_a, meta_b, segs_a, segs_b)
+        comparison = comparison_service.build_insights(
+            meta_a, meta_b, segs_a, segs_b, vis_a, vis_b
+        )
 
         snapshot = AnalysisSnapshot(
             analysis_id=analysis_id,
@@ -73,8 +75,41 @@ class IngestionService:
             comparison=comparison,
         )
         analysis_store.save(snapshot)
-        logger.info("Ingest %s complete", analysis_id)
+        logger.info("Ingest %s complete (ai_pending=%s)", analysis_id, comparison.ai_pending)
+
+        if settings.openai_configured:
+            threading.Thread(
+                target=self._run_llm_comparison,
+                args=(analysis_id, meta_a, meta_b, segs_a, segs_b, vis_a, vis_b, comparison),
+                daemon=True,
+            ).start()
+
         return snapshot
+
+    def _run_llm_comparison(
+        self,
+        analysis_id: str,
+        meta_a: VideoMetadata,
+        meta_b: VideoMetadata,
+        segs_a: list[TranscriptSegment],
+        segs_b: list[TranscriptSegment],
+        vis_a: VideoVisual,
+        vis_b: VideoVisual,
+        base_comparison,
+    ) -> None:
+        try:
+            logger.info("Background LLM comparison for %s", analysis_id)
+            updated = comparison_service.build_llm_insights(
+                meta_a, meta_b, segs_a, segs_b, vis_a, vis_b, base_comparison
+            )
+            analysis_store.update_comparison(analysis_id, updated)
+            logger.info("LLM comparison done for %s", analysis_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Background LLM comparison failed for %s: %s", analysis_id, exc)
+            analysis_store.update_comparison(
+                analysis_id,
+                base_comparison.model_copy(update={"ai_pending": False}),
+            )
 
     # ----------------------------------------------------------------- #
     def _process_video(
@@ -92,7 +127,7 @@ class IngestionService:
             embeddings = embedding_service.embed_documents([c.text for c in chunks])
             chroma_store.upsert_chunks(chunks, embeddings)
 
-        visual = self._build_visual(analysis_id, slot, url, platform)
+        visual = self._build_visual(analysis_id, slot, url, platform, segments)
 
         metadata = VideoMetadata(
             video_id=slot,
@@ -118,20 +153,35 @@ class IngestionService:
         )
         return metadata, segments, visual
 
-    def _build_visual(
-        self, analysis_id: str, slot: VideoSlot, url: str, platform: Platform
-    ) -> VideoVisual:
-        """Run visual understanding (OCR + optional scene summary) for one video."""
+    @staticmethod
+    def _needs_visual(platform: Platform, segments: list[TranscriptSegment]) -> bool:
+        """Skip heavy frame download for YouTube when captions already exist."""
         if not settings.enable_visual:
+            return False
+        if platform == Platform.youtube and segments:
+            return False
+        return True
+
+    def _build_visual(
+        self,
+        analysis_id: str,
+        slot: VideoSlot,
+        url: str,
+        platform: Platform,
+        segments: list[TranscriptSegment],
+    ) -> VideoVisual:
+        if not self._needs_visual(platform, segments):
             return VideoVisual(video_id=slot, platform=platform, available=False)
 
-        frames, summary = visual_service.extract(url, platform)
-        available = bool(frames or summary)
+        frames, summary, on_screen = visual_service.extract(url, platform)
+        available = bool(frames or summary or on_screen)
 
         if available:
             parts: list[str] = []
             if summary:
                 parts.append(f"Scene description: {summary}")
+            if on_screen:
+                parts.append(f"On-screen text: {on_screen}")
             ocr_joined = " | ".join(f.ocr_text for f in frames if f.ocr_text)
             if ocr_joined:
                 parts.append(f"On-screen text: {ocr_joined}")
@@ -146,12 +196,12 @@ class IngestionService:
             available=available,
             frames=frames,
             visual_summary=summary,
+            on_screen_text=on_screen,
         )
 
     def _store_metadata(
         self, analysis_id: str, videos: dict[VideoSlot, VideoMetadata]
     ) -> None:
-        """Embed each video's metadata card and store it in the vector DB."""
         slots = sorted(videos.keys())
         cards = [videos[slot].to_card_text() for slot in slots]
         embeddings = embedding_service.embed_documents(cards)

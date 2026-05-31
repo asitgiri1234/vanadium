@@ -58,9 +58,10 @@ class Settings(BaseSettings):
 
     # Visual understanding (frame OCR + optional vision-LLM scene description).
     enable_visual: bool = Field(default=False, alias="ENABLE_VISUAL")
+    enable_ocr: bool = Field(default=False, alias="ENABLE_OCR")
     tesseract_cmd: str = Field(default="", alias="TESSERACT_CMD")
-    visual_max_frames: int = Field(default=8, alias="VISUAL_MAX_FRAMES")
-    visual_max_height: int = Field(default=720, alias="VISUAL_MAX_HEIGHT")
+    visual_max_frames: int = Field(default=4, alias="VISUAL_MAX_FRAMES")
+    visual_max_height: int = Field(default=480, alias="VISUAL_MAX_HEIGHT")
 
     @property
     def openai_configured(self) -> bool:

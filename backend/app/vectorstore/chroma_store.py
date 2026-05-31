@@ -168,14 +168,17 @@ class ChromaStore:
         analysis_id: str,
         video_id: VideoSlot | None = None,
         top_k: int = 4,
+        record_types: list[str] | None = None,
     ) -> list[Citation]:
         """Return citations for the most relevant chunks within an analysis."""
         collection = self._get_collection()
+        types = record_types or ["transcript"]
 
-        conditions: list[dict[str, Any]] = [
-            {"analysis_id": analysis_id},
-            {"record_type": "transcript"},
-        ]
+        conditions: list[dict[str, Any]] = [{"analysis_id": analysis_id}]
+        if len(types) == 1:
+            conditions.append({"record_type": types[0]})
+        else:
+            conditions.append({"record_type": {"$in": types}})
         if video_id is not None:
             conditions.append({"video_id": video_id})
         where: dict[str, Any] = {"$and": conditions}
@@ -191,11 +194,17 @@ class ChromaStore:
         metas = (result.get("metadatas") or [[]])[0]
         citations: list[Citation] = []
         for doc, meta in zip(docs, metas):
+            record_type = meta.get("record_type", "transcript")
+            chunk_index = int(meta.get("chunk_index", 0))
+            timestamp = meta.get("timestamp", "00:00-00:00")
+            if record_type == "visual":
+                chunk_index = -1
+                timestamp = "visual"
             citations.append(
                 Citation(
                     video_id=meta.get("video_id", "A"),
-                    chunk_index=int(meta.get("chunk_index", 0)),
-                    timestamp=meta.get("timestamp", "00:00-00:00"),
+                    chunk_index=chunk_index,
+                    timestamp=timestamp,
                     source_platform=Platform(meta.get("source_platform", "unknown")),
                     snippet=doc or "",
                 )

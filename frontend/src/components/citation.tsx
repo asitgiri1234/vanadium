@@ -8,8 +8,12 @@ export function CitationChip({ citation }: { citation: CitationType }) {
   const [open, setOpen] = useState(false);
   const color =
     citation.video_id === "A"
-      ? "bg-sky-500/15 text-sky-300 hover:bg-sky-500/25"
-      : "bg-violet-500/15 text-violet-300 hover:bg-violet-500/25";
+      ? "bg-violet-500/15 text-violet-300 hover:bg-violet-500/25"
+      : "bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25";
+  const label =
+    citation.chunk_index === -1
+      ? `Video ${citation.video_id} · visual`
+      : `Video ${citation.video_id} · #${citation.chunk_index} · ${citation.timestamp}`;
 
   return (
     <div className="relative inline-block">
@@ -21,7 +25,7 @@ export function CitationChip({ citation }: { citation: CitationType }) {
         )}
         title={citation.snippet}
       >
-        Video {citation.video_id} · #{citation.chunk_index} · {citation.timestamp}
+        {label}
       </button>
       {open && citation.snippet && (
         <div className="absolute z-10 mt-1 w-72 rounded-md border border-border bg-card p-3 text-xs text-muted-foreground shadow-lg">

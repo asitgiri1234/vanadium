@@ -6,6 +6,8 @@ import { UrlForm } from "@/components/url-form";
 import { VideoCard } from "@/components/video-card";
 import { TranscriptPanel } from "@/components/transcript-panel";
 import { VisualPanel } from "@/components/visual-panel";
+import { ComparisonBar } from "@/components/comparison-bar";
+import { ChatPanel } from "@/components/chat-panel";
 import { ingest } from "@/lib/api";
 import type { AnalysisSnapshot } from "@/lib/types";
 
@@ -58,8 +60,15 @@ export default function Home() {
               <VideoCard video={snapshot.videos.A} />
               <VideoCard video={snapshot.videos.B} />
             </section>
+            <ComparisonBar
+              analysisId={snapshot.analysis_id}
+              videoA={snapshot.videos.A}
+              videoB={snapshot.videos.B}
+              comparison={snapshot.comparison}
+            />
             <TranscriptPanel analysisId={snapshot.analysis_id} />
             <VisualPanel analysisId={snapshot.analysis_id} />
+            <ChatPanel analysisId={snapshot.analysis_id} />
           </>
         )}
 

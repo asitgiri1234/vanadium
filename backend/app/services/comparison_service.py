@@ -2,19 +2,28 @@
 
 Computes the engagement rate and derives strategist-grade signals (hook, CTA,
 pacing, topic overlap, recommendations) that power both the dashboard summary
-and the RAG context. This is the layer that lets Vanadium explain *why* one
-video outperforms another rather than only reporting numbers.
+and the RAG context. When OpenAI is configured, an LLM produces a narrative
+comparison and actionable recommendations using metadata, transcripts, and
+visual analysis.
 """
 
 from __future__ import annotations
 
+import json
+import re
+
+from app.core.config import settings
+from app.core.logging import get_logger
 from app.models.schemas import (
     ComparisonInsights,
     TranscriptSegment,
     VideoMetadata,
     VideoSlot,
+    VideoVisual,
 )
 from app.utils.text import clean_text, first_n_seconds_text, has_cta, keywords
+
+logger = get_logger(__name__)
 
 
 def compute_engagement_rate(likes: int, comments: int, views: int) -> float:
@@ -40,6 +49,20 @@ def _words_per_second(segments: list[TranscriptSegment]) -> float:
     return round(total_words / end, 2) if end > 0 else 0.0
 
 
+def _visual_block(visual: VideoVisual | None) -> str:
+    if not visual or not visual.available:
+        return "none"
+    parts: list[str] = []
+    if visual.visual_summary:
+        parts.append(f"scene: {visual.visual_summary}")
+    if visual.on_screen_text:
+        parts.append(f"on-screen text: {visual.on_screen_text}")
+    ocr = " | ".join(f.ocr_text for f in visual.frames if f.ocr_text)
+    if ocr:
+        parts.append(f"on-screen text (ocr): {ocr}")
+    return "; ".join(parts) if parts else "none"
+
+
 class ComparisonService:
     def build_insights(
         self,
@@ -47,6 +70,8 @@ class ComparisonService:
         video_b: VideoMetadata,
         segments_a: list[TranscriptSegment],
         segments_b: list[TranscriptSegment],
+        visual_a: VideoVisual | None = None,
+        visual_b: VideoVisual | None = None,
     ) -> ComparisonInsights:
         hook_a = first_n_seconds_text(_segments_to_pairs(segments_a))
         hook_b = first_n_seconds_text(_segments_to_pairs(segments_b))
@@ -72,6 +97,49 @@ class ComparisonService:
             hook_b=hook_b,
             cta_a=cta_a,
             cta_b=cta_b,
+            ai_pending=settings.openai_configured,
+        )
+
+    def build_llm_insights(
+        self,
+        video_a: VideoMetadata,
+        video_b: VideoMetadata,
+        segments_a: list[TranscriptSegment],
+        segments_b: list[TranscriptSegment],
+        visual_a: VideoVisual | None = None,
+        visual_b: VideoVisual | None = None,
+        base: ComparisonInsights | None = None,
+    ) -> ComparisonInsights:
+        """Run the LLM strategist (slow) — call from a background thread."""
+        hook_a = first_n_seconds_text(_segments_to_pairs(segments_a))
+        hook_b = first_n_seconds_text(_segments_to_pairs(segments_b))
+        text_a = _full_text(segments_a)
+        text_b = _full_text(segments_b)
+        winner = self._winner(video_a, video_b)
+
+        summary, recommendations = self._llm_strategist(
+            video_a, video_b, hook_a, hook_b,
+            has_cta(text_a), has_cta(text_b),
+            text_a, text_b, winner, visual_a, visual_b,
+        )
+
+        if base is None:
+            return self.build_insights(
+                video_a, video_b, segments_a, segments_b, visual_a, visual_b
+            ).model_copy(
+                update={
+                    "strategist_summary": summary,
+                    "recommendations": recommendations,
+                    "ai_pending": False,
+                }
+            )
+
+        return base.model_copy(
+            update={
+                "strategist_summary": summary,
+                "recommendations": recommendations,
+                "ai_pending": False,
+            }
         )
 
     @staticmethod
@@ -148,6 +216,100 @@ class ComparisonService:
             out.append(f"Video {bigger}'s creator has a larger following.")
 
         return out
+
+    def _llm_strategist(
+        self,
+        a: VideoMetadata,
+        b: VideoMetadata,
+        hook_a: str,
+        hook_b: str,
+        cta_a: bool,
+        cta_b: bool,
+        text_a: str,
+        text_b: str,
+        winner: VideoSlot | None,
+        visual_a: VideoVisual | None,
+        visual_b: VideoVisual | None,
+    ) -> tuple[str, list[str]]:
+        """Generate narrative comparison + recommendations via GPT-4o-mini."""
+        try:
+            from langchain_core.messages import HumanMessage, SystemMessage
+            from langchain_openai import ChatOpenAI
+
+            winner_label = f"Video {winner}" if winner else "tie (comparable engagement)"
+            excerpt_a = (text_a[:400] + "…") if len(text_a) > 400 else (text_a or "none")
+            excerpt_b = (text_b[:400] + "…") if len(text_b) > 400 else (text_b or "none")
+
+            user_content = f"""Compare these two social videos as a content strategist.
+
+VIDEO A ({a.platform.value})
+- title: {a.title}
+- creator: {a.creator} ({a.follower_count:,} followers)
+- views: {a.views:,} | likes: {a.likes:,} | comments: {a.comments:,}
+- engagement rate: {a.engagement_rate}%
+- duration: {a.duration_seconds}s
+- hook (first 5s): {hook_a or "n/a"}
+- CTA present: {cta_a}
+- transcript excerpt: {excerpt_a}
+- visual analysis: {_visual_block(visual_a)}
+
+VIDEO B ({b.platform.value})
+- title: {b.title}
+- creator: {b.creator} ({b.follower_count:,} followers)
+- views: {b.views:,} | likes: {b.likes:,} | comments: {b.comments:,}
+- engagement rate: {b.engagement_rate}%
+- duration: {b.duration_seconds}s
+- hook (first 5s): {hook_b or "n/a"}
+- CTA present: {cta_b}
+- transcript excerpt: {excerpt_b}
+- visual analysis: {_visual_block(visual_b)}
+
+Engagement winner: {winner_label}
+
+Respond with valid JSON only (no markdown fences):
+{{
+  "summary": "2-4 sentences explaining WHY one outperformed the other — hooks, visuals, pacing, topic, CTA, format. Ground claims in the data above.",
+  "recommendations": ["3-5 specific actionable tips for improving future content, referencing what worked in the stronger video"]
+}}"""
+
+            llm = ChatOpenAI(
+                model=settings.llm_model,
+                api_key=settings.openai_api_key,
+                temperature=0.4,
+            )
+            resp = llm.invoke([
+                SystemMessage(content=(
+                    "You are Vanadium, an expert AI content strategist. "
+                    "Compare videos with evidence-backed, creator-friendly advice."
+                )),
+                HumanMessage(content=user_content),
+            ])
+            raw = clean_text(getattr(resp, "content", "") or "")
+            return self._parse_llm_json(raw)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("LLM comparison failed: %s", exc)
+            return "", []
+
+    @staticmethod
+    def _parse_llm_json(raw: str) -> tuple[str, list[str]]:
+        """Extract summary + recommendations from LLM JSON output."""
+        text = raw.strip()
+        # Strip optional ```json fences.
+        if text.startswith("```"):
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+        try:
+            data = json.loads(text)
+            summary = clean_text(str(data.get("summary", "")))
+            recs = data.get("recommendations") or []
+            if isinstance(recs, list):
+                recommendations = [clean_text(str(r)) for r in recs if str(r).strip()]
+            else:
+                recommendations = []
+            return summary, recommendations
+        except json.JSONDecodeError:
+            logger.warning("Could not parse LLM comparison JSON")
+            return raw[:1200], []
 
 
 comparison_service = ComparisonService()
