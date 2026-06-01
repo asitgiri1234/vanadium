@@ -29,7 +29,12 @@ def fetch_instagram_reel_proxy(url: str) -> dict[str, Any] | None:
         logger.warning("Frontend Instagram reel proxy failed for %s: %s", url, exc)
         return None
 
-    if not isinstance(payload, dict) or not payload.get("ok"):
+    if not isinstance(payload, dict):
+        return None
+    if not payload.get("ok") and not any(
+        payload.get(k) is not None
+        for k in ("like_count", "comment_count", "video_urls", "title", "thumbnail_url")
+    ):
         return None
     logger.info("Instagram reel proxy ok for %s", url)
     return payload

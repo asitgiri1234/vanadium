@@ -18,6 +18,16 @@ _IG_APP_ID = "936619743392459"
 _VIDEO_URL_RE = re.compile(r'"video_url"\s*:\s*"([^"]+)"')
 _PLAYBACK_RE = re.compile(r'"playback_url"\s*:\s*"([^"]+)"')
 _CONTENT_URL_RE = re.compile(r'"contentUrl"\s*:\s*"([^"]+)"')
+_VIDEO_DURATION_RE = re.compile(r'"video_duration"\s*:\s*([\d.]+)')
+_LIKE_COUNT_RE = re.compile(r'"like_count"\s*:\s*(\d+)')
+_COMMENT_COUNT_RE = re.compile(r'"comment_count"\s*:\s*(\d+)')
+_PLAY_COUNT_RE = re.compile(r'"play_count"\s*:\s*(\d+)')
+_EDGE_LIKE_RE = re.compile(
+    r'"edge_media_preview_like"\s*:\s*\{\s*"count"\s*:\s*(\d+)'
+)
+_EDGE_COMMENT_RE = re.compile(
+    r'"edge_media_to_(?:parent_)?comment"\s*:\s*\{\s*"count"\s*:\s*(\d+)'
+)
 _THUMB_RE = re.compile(r'"display_url"\s*:\s*"([^"]+)"')
 
 
@@ -39,6 +49,31 @@ def _unique_urls(patterns: list[re.Pattern[str]], html: str) -> list[str]:
             if url.startswith("http") and url not in found:
                 found.append(url)
     return found
+
+
+def _first_int(patterns: list[re.Pattern[str]], html: str) -> int | None:
+    for pattern in patterns:
+        match = pattern.search(html)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def extract_instagram_engagement(html: str) -> dict[str, int | None]:
+    """Parse likes/comments/views from embed or watch page JSON blobs."""
+    likes = _first_int([_LIKE_COUNT_RE, _EDGE_LIKE_RE], html)
+    comments = _first_int([_COMMENT_COUNT_RE, _EDGE_COMMENT_RE], html)
+    views = _first_int([_PLAY_COUNT_RE], html)
+    duration: int | None = None
+    dur_match = _VIDEO_DURATION_RE.search(html)
+    if dur_match:
+        duration = int(float(dur_match.group(1)))
+    return {
+        "like_count": likes,
+        "comment_count": comments,
+        "view_count": views,
+        "duration_seconds": duration,
+    }
 
 
 def _fetch_html(url: str) -> str | None:
@@ -67,6 +102,12 @@ def extract_instagram_media_urls(reel_url: str) -> dict[str, Any]:
 
     video_urls: list[str] = []
     thumb_urls: list[str] = []
+    engagement: dict[str, int | None] = {
+        "like_count": None,
+        "comment_count": None,
+        "view_count": None,
+        "duration_seconds": None,
+    }
 
     for page_url in (embed_url, f"{reel_url}/embed/", reel_url):
         html = _fetch_html(page_url)
@@ -76,12 +117,17 @@ def extract_instagram_media_urls(reel_url: str) -> dict[str, Any]:
             _unique_urls([_VIDEO_URL_RE, _PLAYBACK_RE, _CONTENT_URL_RE], html)
         )
         thumb_urls.extend(_unique_urls([_THUMB_RE], html))
+        page_eng = extract_instagram_engagement(html)
+        for key, value in page_eng.items():
+            if value is not None and engagement.get(key) is None:
+                engagement[key] = value
         if video_urls:
             break
 
     return {
         "video_urls": list(dict.fromkeys(video_urls)),
         "thumbnail_urls": list(dict.fromkeys(thumb_urls)),
+        **engagement,
     }
 
 

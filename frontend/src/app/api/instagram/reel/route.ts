@@ -53,6 +53,50 @@ async function fetchOembed(reelUrl: string) {
   return resp.json().catch(() => null);
 }
 
+function extractEngagement(html: string): {
+  like_count: number | null;
+  comment_count: number | null;
+  view_count: number | null;
+  duration_seconds: number | null;
+} {
+  const pick = (patterns: RegExp[]): number | null => {
+    for (const re of patterns) {
+      const m = html.match(re);
+      if (m?.[1]) return parseInt(m[1], 10);
+    }
+    return null;
+  };
+  const dur = html.match(/"video_duration"\s*:\s*([\d.]+)/);
+  return {
+    like_count: pick([
+      /"like_count"\s*:\s*(\d+)/,
+      /"edge_media_preview_like"\s*:\s*\{\s*"count"\s*:\s*(\d+)/,
+    ]),
+    comment_count: pick([
+      /"comment_count"\s*:\s*(\d+)/,
+      /"edge_media_to_(?:parent_)?comment"\s*:\s*\{\s*"count"\s*:\s*(\d+)/,
+    ]),
+    view_count: pick([/"play_count"\s*:\s*(\d+)/]),
+    duration_seconds: dur?.[1] ? Math.round(parseFloat(dur[1])) : null,
+  };
+}
+
+async function fetchWatchHtml(reelUrl: string): Promise<string> {
+  try {
+    const resp = await fetch(reelUrl.split("?")[0].replace(/\/$/, ""), {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+      cache: "no-store",
+    });
+    if (resp.ok) return resp.text();
+  } catch {
+    /* ignore */
+  }
+  return "";
+}
+
 async function fetchEmbedHtml(reelUrl: string): Promise<string> {
   const clean = reelUrl.split("?")[0].replace(/\/$/, "");
   for (const suffix of ["/embed/captioned/", "/embed/"]) {
@@ -80,23 +124,36 @@ export async function GET(request: NextRequest) {
 
   try {
     const oembed = await fetchOembed(reelUrl);
-    const html = await fetchEmbedHtml(reelUrl);
-    const { videoUrls, thumbUrls } = extractUrls(html);
+    const embedHtml = await fetchEmbedHtml(reelUrl);
+    const watchHtml = await fetchWatchHtml(reelUrl);
+    const combinedHtml = `${embedHtml}\n${watchHtml}`;
+
+    const { videoUrls, thumbUrls } = extractUrls(combinedHtml);
+    const engagement = extractEngagement(combinedHtml);
 
     const title = oembed?.title ?? null;
     const creator = oembed?.author_name ?? null;
     const creatorUrl = oembed?.author_url ?? null;
-    const thumbnail =
-      oembed?.thumbnail_url ?? thumbUrls[0] ?? null;
+    const thumbnail = oembed?.thumbnail_url ?? thumbUrls[0] ?? null;
 
     return NextResponse.json({
-      ok: Boolean(title || thumbnail || videoUrls.length),
+      ok: Boolean(
+        title ||
+          thumbnail ||
+          videoUrls.length ||
+          engagement.like_count != null ||
+          engagement.comment_count != null,
+      ),
       title,
       creator,
       creator_url: creatorUrl,
       thumbnail_url: thumbnail,
       video_urls: videoUrls,
       thumbnail_urls: thumbUrls,
+      like_count: engagement.like_count,
+      comment_count: engagement.comment_count,
+      view_count: engagement.view_count,
+      duration_seconds: engagement.duration_seconds,
     });
   } catch (error) {
     return NextResponse.json(

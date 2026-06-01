@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 type CaptionSegment = { text: string; start: number; duration: number };
 
@@ -152,9 +153,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    let segments = await fetchViaTranscriptPlus(videoId);
+    let segments = await fetchViaInnertubeCaptions(videoId);
+    if (!segments.length) segments = await fetchViaTranscriptPlus(videoId);
     if (!segments.length) segments = await fetchViaYoutubeTranscript(videoId);
-    if (!segments.length) segments = await fetchViaInnertubeCaptions(videoId);
     return NextResponse.json({ segments });
   } catch (error) {
     return NextResponse.json(

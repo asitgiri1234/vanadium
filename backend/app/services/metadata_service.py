@@ -314,6 +314,23 @@ class MetadataService:
                 if u not in media_hints["ig_thumbnail_urls"]:
                     media_hints["ig_thumbnail_urls"].append(u)
 
+        engagement = RawMetadata(platform=Platform.instagram)
+        if scraped.get("like_count") is not None:
+            engagement.likes = int(scraped["like_count"])
+        if scraped.get("comment_count") is not None:
+            engagement.comments = int(scraped["comment_count"])
+        if scraped.get("view_count") is not None:
+            engagement.views = int(scraped["view_count"])
+        if scraped.get("duration_seconds") is not None:
+            engagement.duration_seconds = int(scraped["duration_seconds"])
+        if (
+            engagement.likes is not None
+            or engagement.comments is not None
+            or engagement.views
+            or engagement.duration_seconds
+        ):
+            result = _merge_metadata(result, engagement)
+
         result.raw = {
             **(result.raw if isinstance(result.raw, dict) else {}),
             **media_hints,
@@ -406,7 +423,7 @@ class MetadataService:
         likes = _as_metric_int(info.get("like_count"))
         comments = _as_metric_int(info.get("comment_count"))
 
-        if platform == Platform.instagram and (info.get("like_count") is None or likes == 0):
+        if platform == Platform.instagram and info.get("like_count") is None:
             likes = None
 
         return RawMetadata(

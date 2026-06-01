@@ -23,6 +23,14 @@ _WATCH_UA = (
 )
 _CONSENT_COOKIE = {"CONSENT": "YES+cb.20210328-17-p0.en+FX+667"}
 
+_INNERTUBE_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+_INNERTUBE_CLIENTS = (
+    {"clientName": "ANDROID", "clientVersion": "20.10.38", "hl": "en", "gl": "US"},
+    {"clientName": "MWEB", "clientVersion": "2.20240405.01.00", "hl": "en", "gl": "US"},
+    {"clientName": "WEB", "clientVersion": "2.20240405.00.00", "hl": "en", "gl": "US"},
+    {"clientName": "TVHTML5_SIMPLY_EMBEDDED_PLAYER", "clientVersion": "2.0", "hl": "en", "gl": "US"},
+)
+
 
 def _extract_json_array(html: str, marker: str) -> list[dict[str, Any]] | None:
     idx = html.find(marker)
@@ -133,6 +141,67 @@ def _fetch_caption_url(url: str) -> list[dict]:
                         return parsed
     except Exception as exc:  # noqa: BLE001
         logger.warning("Caption download failed for %s: %s", url[:80], exc)
+    return []
+
+
+def _fetch_from_innertube(video_id: str) -> list[dict]:
+    """Caption tracks via youtubei.googleapis.com — works on Render datacenter IPs."""
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": _WATCH_UA,
+        "Origin": "https://www.youtube.com",
+        "Referer": "https://www.youtube.com/",
+    }
+    for client in _INNERTUBE_CLIENTS:
+        try:
+            with httpx.Client(timeout=35.0, follow_redirects=True) as http:
+                resp = http.post(
+                    f"https://youtubei.googleapis.com/youtubei/v1/player?key={_INNERTUBE_KEY}",
+                    json={"context": {"client": client}, "videoId": video_id},
+                    headers=headers,
+                )
+                if resp.status_code != 200:
+                    continue
+                player = resp.json()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Innertube player failed for %s: %s", video_id, exc)
+            continue
+
+        tracks = (
+            player.get("captions", {})
+            .get("playerCaptionsTracklistRenderer", {})
+            .get("captionTracks")
+            or []
+        )
+        if not tracks:
+            continue
+
+        def lang_score(code: str) -> int:
+            if code.startswith("en"):
+                return 0
+            if code.startswith("a.en"):
+                return 1
+            return 2
+
+        sorted_tracks = sorted(
+            tracks,
+            key=lambda t: lang_score(str(t.get("languageCode") or "")),
+        )
+        for track in sorted_tracks:
+            base = track.get("baseUrl") or ""
+            if not base:
+                continue
+            if base.startswith("/"):
+                base = urljoin("https://www.youtube.com", base)
+            segments = _fetch_caption_url(base)
+            if segments:
+                logger.info(
+                    "YouTube captions from innertube (%s) for %s: %d segments",
+                    track.get("languageCode"),
+                    video_id,
+                    len(segments),
+                )
+                return segments
     return []
 
 
@@ -271,6 +340,11 @@ def fetch_youtube_transcript_raw(url: str) -> list[dict]:
 
     cloud = is_youtube_cloud_host()
 
+    # Innertube via googleapis.com is the most reliable path on Render (datacenter IP).
+    segments = _fetch_from_innertube(video_id)
+    if segments:
+        return segments
+
     if cloud and settings.supadata_api_key.strip():
         segments = _fetch_from_supadata(video_id)
         if segments:
@@ -283,6 +357,11 @@ def fetch_youtube_transcript_raw(url: str) -> list[dict]:
             if isinstance(segments, list) and segments:
                 parsed = [s for s in segments if isinstance(s, dict)]
                 if parsed:
+                    logger.info(
+                        "YouTube captions from Vercel proxy for %s: %d segments",
+                        video_id,
+                        len(parsed),
+                    )
                     return parsed
 
     for fetcher in (
