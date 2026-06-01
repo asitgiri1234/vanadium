@@ -17,6 +17,7 @@ from app.models.raw_metadata import RawMetadata
 from app.models.schemas import Platform
 from app.utils.text import extract_hashtags
 from app.utils.url_utils import detect_platform
+from app.utils.youtube_innertube import fetch_youtube_innertube_metadata
 from app.utils.youtube_web import YouTubeWebMetadata, fetch_youtube_web_metadata
 from app.utils.ytdlp import base_ytdlp_opts
 
@@ -78,8 +79,8 @@ def _metadata_is_empty(raw: RawMetadata) -> bool:
     return raw.title == "Unknown title" and raw.creator == "Unknown creator"
 
 
-def _youtube_needs_web_fallback(raw: RawMetadata) -> bool:
-    """True when yt-dlp missed engagement fields (common on cloud/datacenter IPs)."""
+def _youtube_needs_enrichment(raw: RawMetadata) -> bool:
+    """True when engagement fields are still missing after primary extraction."""
     return _metadata_is_empty(raw) or raw.views == 0 or raw.duration_seconds == 0
 
 
@@ -122,19 +123,37 @@ def _web_to_raw(web: YouTubeWebMetadata, platform: Platform) -> RawMetadata:
 class MetadataService:
     def fetch(self, url: str) -> RawMetadata:
         platform = detect_platform(url)
+        if platform == Platform.youtube:
+            return self._fetch_youtube(url)
+
         try:
-            result = self._fetch_with_ytdlp(url, platform)
+            return self._fetch_with_ytdlp(url, platform)
         except Exception as exc:  # noqa: BLE001 - extraction is best-effort
             logger.warning("Metadata extraction failed for %s: %s", url, exc)
-            result = RawMetadata(platform=platform)
+            return RawMetadata(platform=platform)
 
-        if platform == Platform.youtube and _youtube_needs_web_fallback(result):
+    def _fetch_youtube(self, url: str) -> RawMetadata:
+        """YouTube: yt-dlp first, then innertube (cloud-safe), then web/API/oEmbed."""
+        result = RawMetadata(platform=Platform.youtube)
+
+        try:
+            result = self._fetch_with_ytdlp(url, Platform.youtube)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("yt-dlp failed for %s: %s", url, exc)
+
+        if _youtube_needs_enrichment(result):
+            innertube = fetch_youtube_innertube_metadata(url)
+            if innertube:
+                logger.info("YouTube metadata enriched via innertube for %s", url)
+                result = _merge_metadata(result, innertube)
+
+        if _youtube_needs_enrichment(result):
             web = fetch_youtube_web_metadata(url)
             if web:
                 logger.info("YouTube metadata enriched via web scrape for %s", url)
-                result = _merge_metadata(result, _web_to_raw(web, platform))
+                result = _merge_metadata(result, _web_to_raw(web, Platform.youtube))
 
-        if platform == Platform.youtube and _youtube_needs_web_fallback(result):
+        if _youtube_needs_enrichment(result):
             from app.utils.youtube_api import fetch_youtube_api_metadata
 
             api_meta = fetch_youtube_api_metadata(url)
@@ -142,7 +161,7 @@ class MetadataService:
                 logger.info("YouTube metadata enriched via Data API for %s", url)
                 result = _merge_metadata(result, api_meta)
 
-        if platform == Platform.youtube and _metadata_is_empty(result):
+        if _metadata_is_empty(result):
             oembed = self._fetch_youtube_oembed(url)
             if oembed:
                 logger.info("YouTube metadata recovered via oEmbed for %s", url)
@@ -151,7 +170,7 @@ class MetadataService:
         return result
 
     def _fetch_youtube_oembed(self, url: str) -> RawMetadata | None:
-        """Public oEmbed API — reliable title/thumbnail when yt-dlp is blocked."""
+        """Public oEmbed API — reliable title/thumbnail when all else fails."""
         try:
             oembed_url = (
                 "https://www.youtube.com/oembed"
@@ -160,7 +179,9 @@ class MetadataService:
             with httpx.Client(timeout=15.0, follow_redirects=True) as client:
                 resp = client.get(
                     oembed_url,
-                    headers={"User-Agent": "Vanadium/1.0 (+https://github.com/asitgiri1234/vanadium)"},
+                    headers={
+                        "User-Agent": "Vanadium/1.0 (+https://github.com/asitgiri1234/vanadium)"
+                    },
                 )
                 resp.raise_for_status()
                 data = resp.json()
@@ -181,7 +202,6 @@ class MetadataService:
         )
 
     def _fetch_with_ytdlp(self, url: str, platform: Platform) -> RawMetadata:
-        # Imported lazily so the package isn't required just to import the app.
         from yt_dlp import YoutubeDL
 
         opts = base_ytdlp_opts(skip_download=True, extract_flat=False)
@@ -192,7 +212,6 @@ class MetadataService:
         description = info.get("description") or ""
         tags = info.get("tags") or []
 
-        # Merge explicit tags with hashtags parsed from the description/caption.
         hashtags: list[str] = []
         for t in tags:
             tag = t if str(t).startswith("#") else f"#{t}"
@@ -212,13 +231,10 @@ class MetadataService:
             info.get("channel_follower_count") or info.get("uploader_subscriber_count")
         )
 
-        # Instagram reels often expose plays under ``play_count`` rather than
-        # ``view_count`` (and sometimes neither, in yt-dlp's webpage path).
         views = _as_int(info.get("view_count") or info.get("play_count"))
         likes = _as_metric_int(info.get("like_count"))
         comments = _as_metric_int(info.get("comment_count"))
 
-        # Instagram often omits or zeroes like_count when likes are hidden.
         if platform == Platform.instagram:
             if info.get("like_count") is None or likes == 0:
                 likes = None

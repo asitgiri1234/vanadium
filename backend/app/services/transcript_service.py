@@ -66,6 +66,9 @@ class TranscriptService:
             return []
 
         raw = self._fetch_youtube_raw(video_id)
+        if not raw:
+            raw = self._fetch_youtube_captions_ytdlp(url)
+
         segments: list[TranscriptSegment] = []
         for item in raw:
             text = (item.get("text") or "").strip()
@@ -94,8 +97,105 @@ class TranscriptService:
             ]
         except (TypeError, AttributeError):
             pass
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("YouTube transcript API failed for %s: %s", video_id, exc)
 
-        return YouTubeTranscriptApi.get_transcript(video_id)  # type: ignore[attr-defined]
+        try:
+            return YouTubeTranscriptApi.get_transcript(video_id)  # type: ignore[attr-defined]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("YouTube transcript API (legacy) failed for %s: %s", video_id, exc)
+            return []
+
+    @staticmethod
+    def _fetch_youtube_captions_ytdlp(url: str) -> list[dict]:
+        """Fallback: pull auto-generated captions via yt-dlp when the transcript API is blocked."""
+        from yt_dlp import YoutubeDL
+
+        try:
+            opts = base_ytdlp_opts(skip_download=True)
+            with YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("YouTube caption fallback (yt-dlp) failed for %s: %s", url, exc)
+            return []
+
+        info = info or {}
+        captions = info.get("automatic_captions") or info.get("subtitles") or {}
+        track = None
+        for lang in ("en", "en-US", "en-orig", "a.en"):
+            if lang in captions:
+                track = captions[lang]
+                break
+        if not track:
+            for lang, entries in captions.items():
+                if str(lang).startswith("en"):
+                    track = entries
+                    break
+        if not track:
+            return []
+
+        sub_url = next((e.get("url") for e in track if e.get("ext") == "vtt"), None)
+        if not sub_url and track:
+            sub_url = track[0].get("url")
+        if not sub_url:
+            return []
+
+        try:
+            import httpx
+
+            text = httpx.get(sub_url, timeout=30).text
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("YouTube caption download failed for %s: %s", url, exc)
+            return []
+
+        return TranscriptService._parse_vtt(text)
+
+    @staticmethod
+    def _parse_vtt(vtt: str) -> list[dict]:
+        """Minimal WebVTT → transcript segments."""
+        segments: list[dict] = []
+        block: list[str] = []
+        start_sec = 0.0
+
+        def ts_to_sec(ts: str) -> float:
+            parts = ts.strip().split(":")
+            if len(parts) == 3:
+                h, m, s = parts
+                return int(h) * 3600 + int(m) * 60 + float(s.replace(",", "."))
+            if len(parts) == 2:
+                m, s = parts
+                return int(m) * 60 + float(s.replace(",", "."))
+            return 0.0
+
+        for line in vtt.splitlines():
+            if "-->" in line:
+                start_sec = ts_to_sec(line.split("-->")[0])
+                block = []
+                continue
+            stripped = line.strip()
+            if not stripped or stripped.startswith("WEBVTT") or stripped.isdigit():
+                continue
+            if stripped.startswith("NOTE"):
+                block = []
+                continue
+            block.append(stripped)
+            if block:
+                segments.append(
+                    {
+                        "text": " ".join(block),
+                        "start": start_sec,
+                        "duration": 0.0,
+                    }
+                )
+                block = []
+
+        # Merge duplicate consecutive lines from VTT cue overlap
+        merged: list[dict] = []
+        for seg in segments:
+            if merged and merged[-1]["text"] == seg["text"]:
+                continue
+            merged.append(seg)
+        return merged
 
     # ----------------------------------------------------------------- #
     # Instagram (yt-dlp audio -> Groq Whisper API or local Whisper)

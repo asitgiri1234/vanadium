@@ -1,9 +1,4 @@
-"""YouTube watch-page metadata extraction.
-
-When yt-dlp is blocked on cloud hosts (Render datacenter IPs), we scrape the
-public watch page for ``ytInitialPlayerResponse`` plus engagement counts
-embedded in the page JSON. This path does not require an API key.
-"""
+"""YouTube watch-page metadata extraction (secondary fallback)."""
 
 from __future__ import annotations
 
@@ -20,13 +15,18 @@ from app.utils.url_utils import extract_youtube_id
 logger = get_logger(__name__)
 
 _WATCH_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Linux; Android 10; Mobile) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
 )
 
-_PLAYER_RE = re.compile(r"var ytInitialPlayerResponse = (\{.*?\});")
 _LIKE_RE = re.compile(r'"likeCount"\s*:\s*"(\d+)"')
 _COMMENT_RE = re.compile(r'"commentCount"\s*:\s*"(\d+)"')
+
+_PLAYER_MARKERS = (
+    "var ytInitialPlayerResponse = ",
+    "ytInitialPlayerResponse = ",
+    "window['ytInitialPlayerResponse'] = ",
+)
 
 
 @dataclass
@@ -64,8 +64,41 @@ def _first_int(pattern: re.Pattern[str], html: str) -> int | None:
         return None
 
 
+def _extract_json_object(html: str, marker: str) -> dict | None:
+    """Extract a JSON object after ``marker`` using brace-depth counting."""
+    idx = html.find(marker)
+    if idx < 0:
+        return None
+    start = idx + len(marker)
+    while start < len(html) and html[start] in " \t\n\r":
+        start += 1
+    if start >= len(html) or html[start] != "{":
+        return None
+    depth = 0
+    for i in range(start, len(html)):
+        ch = html[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(html[start : i + 1])
+                except json.JSONDecodeError:
+                    return None
+    return None
+
+
+def _player_from_html(html: str) -> dict | None:
+    for marker in _PLAYER_MARKERS:
+        obj = _extract_json_object(html, marker)
+        if obj:
+            return obj
+    return None
+
+
 def fetch_youtube_web_metadata(url: str) -> YouTubeWebMetadata | None:
-    """Extract title, views, likes, duration, etc. from the YouTube watch page."""
+    """Extract metadata from the YouTube watch page HTML."""
     video_id = extract_youtube_id(url)
     if not video_id:
         return None
@@ -79,34 +112,24 @@ def fetch_youtube_web_metadata(url: str) -> YouTubeWebMetadata | None:
         "Accept-Language": "en-US,en;q=0.9",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
-    # Bypass EU consent interstitial that strips player JSON on server-side fetches.
     cookies = {"CONSENT": "YES+cb.20210328-17-p0.en+FX+667"}
 
     html = ""
+    player: dict | None = None
     for watch_url in watch_urls:
         try:
             with httpx.Client(timeout=25.0, follow_redirects=True) as client:
                 resp = client.get(watch_url, headers=headers, cookies=cookies)
                 resp.raise_for_status()
                 html = resp.text
-            if _PLAYER_RE.search(html):
+            player = _player_from_html(html)
+            if player:
                 break
         except Exception as exc:  # noqa: BLE001
             logger.warning("YouTube web scrape failed for %s: %s", watch_url, exc)
-            html = ""
 
-    if not html:
-        return None
-
-    player_match = _PLAYER_RE.search(html)
-    if not player_match:
+    if not player:
         logger.warning("YouTube web scrape: no player response for %s", video_id)
-        return None
-
-    try:
-        player = json.loads(player_match.group(1))
-    except json.JSONDecodeError as exc:
-        logger.warning("YouTube web scrape: invalid player JSON for %s: %s", video_id, exc)
         return None
 
     details = player.get("videoDetails") or {}
@@ -125,14 +148,23 @@ def fetch_youtube_web_metadata(url: str) -> YouTubeWebMetadata | None:
     if not thumbnail:
         thumbnail = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
 
+    likes = _first_int(_LIKE_RE, html)
+    if likes is None and micro.get("likeCount") is not None:
+        try:
+            likes = int(micro["likeCount"])
+        except (TypeError, ValueError):
+            likes = None
+
+    comments = _first_int(_COMMENT_RE, html)
+
     return YouTubeWebMetadata(
         title=title,
         creator=author,
         creator_url=creator_url,
         thumbnail=thumbnail,
         views=int(details.get("viewCount") or 0),
-        likes=_first_int(_LIKE_RE, html),
-        comments=_first_int(_COMMENT_RE, html),
+        likes=likes,
+        comments=comments,
         duration_seconds=int(details.get("lengthSeconds") or 0),
         upload_date=_parse_upload_date(micro.get("publishDate") or micro.get("uploadDate")),
         description=(details.get("shortDescription") or "").strip(),
