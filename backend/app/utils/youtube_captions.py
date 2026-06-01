@@ -270,15 +270,10 @@ def fetch_youtube_transcript_raw(url: str) -> list[dict]:
 
     cloud = is_youtube_cloud_host()
 
-    if cloud:
+    if cloud and settings.supadata_api_key.strip():
         segments = _fetch_from_supadata(video_id)
         if segments:
             return segments
-        logger.info(
-            "YouTube transcript: cloud host — skipping youtube.com caption fetchers for %s",
-            video_id,
-        )
-        return []
 
     for fetcher in (
         _fetch_from_transcript_api,
@@ -289,5 +284,12 @@ def fetch_youtube_transcript_raw(url: str) -> list[dict]:
         segments = fetcher(video_id)
         if segments:
             return segments
+
+    if cloud:
+        logger.info(
+            "YouTube transcript unavailable on cloud host for %s "
+            "(set SUPADATA_API_KEY for reliable captions)",
+            video_id,
+        )
 
     return []

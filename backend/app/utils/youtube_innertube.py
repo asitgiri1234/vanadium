@@ -46,6 +46,8 @@ _INNERTUBE_CLIENTS: list[dict[str, Any]] = [
 
 _LIKE_RE = re.compile(r'"likeCount"\s*:\s*"(\d+)"')
 _COMMENT_RE = re.compile(r'"commentCount"\s*:\s*"(\d+)"')
+_VIEW_RE = re.compile(r'"viewCount"\s*:\s*"(\d+)"')
+_DURATION_RE = re.compile(r'"lengthSeconds"\s*:\s*"(\d+)"')
 
 _HEADERS = {
     "Content-Type": "application/json",
@@ -88,21 +90,31 @@ def _metric_from_micro_or_json(
     return None
 
 
+def _regex_int(pattern: re.Pattern[str], blob: str) -> int | None:
+    match = pattern.search(blob)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
 def _parse_innertube_response(data: dict[str, Any], video_id: str) -> RawMetadata | None:
     details = data.get("videoDetails") or {}
-    title = (details.get("title") or "").strip()
-    if not title:
-        return None
-
-    views = int(details.get("viewCount") or 0)
-    duration = int(details.get("lengthSeconds") or 0)
-    if views == 0 and duration == 0 and not title:
-        return None
-
     micro = (data.get("microformat") or {}).get("playerMicroformatRenderer") or {}
     blob = json.dumps(data)
-    channel_id = details.get("channelId")
 
+    title = (details.get("title") or micro.get("title") or "").strip()
+    views = int(details.get("viewCount") or 0) or (_regex_int(_VIEW_RE, blob) or 0)
+    duration = int(details.get("lengthSeconds") or 0) or (_regex_int(_DURATION_RE, blob) or 0)
+    comments = _metric_from_micro_or_json(micro, blob, "commentCount", _COMMENT_RE)
+    likes = _metric_from_micro_or_json(micro, blob, "likeCount", _LIKE_RE)
+
+    if not title and views == 0 and duration == 0 and comments is None:
+        return None
+
+    channel_id = details.get("channelId") or micro.get("externalChannelId")
     thumbnails = details.get("thumbnail", {}).get("thumbnails") or []
     thumbnail = thumbnails[-1].get("url") if thumbnails else None
     if not thumbnail:
@@ -110,13 +122,13 @@ def _parse_innertube_response(data: dict[str, Any], video_id: str) -> RawMetadat
 
     return RawMetadata(
         platform=Platform.youtube,
-        title=title,
-        creator=(details.get("author") or "Unknown creator").strip(),
+        title=title or "Unknown title",
+        creator=(details.get("author") or micro.get("ownerChannelName") or "Unknown creator").strip(),
         creator_url=f"https://www.youtube.com/channel/{channel_id}" if channel_id else None,
         thumbnail=thumbnail,
         views=views,
-        likes=_metric_from_micro_or_json(micro, blob, "likeCount", _LIKE_RE),
-        comments=_metric_from_micro_or_json(micro, blob, "commentCount", _COMMENT_RE),
+        likes=likes,
+        comments=comments,
         duration_seconds=duration,
         upload_date=_parse_upload_date(micro.get("publishDate") or micro.get("uploadDate")),
         description=(details.get("shortDescription") or "").strip(),
