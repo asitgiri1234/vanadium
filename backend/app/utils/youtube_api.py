@@ -81,11 +81,16 @@ def fetch_youtube_api_metadata(url: str) -> RawMetadata | None:
     published = snippet.get("publishedAt") or ""
     upload_date = published[:10] if len(published) >= 10 else None
 
+    follower_count = 0
+    if channel_id:
+        follower_count = _fetch_channel_subscriber_count(api_key, channel_id) or 0
+
     return RawMetadata(
         platform=Platform.youtube,
         title=snippet.get("title") or "Unknown title",
         creator=snippet.get("channelTitle") or "Unknown creator",
         creator_url=f"https://www.youtube.com/channel/{channel_id}" if channel_id else None,
+        follower_count=follower_count,
         thumbnail=thumb,
         views=stat_int("viewCount") or 0,
         likes=stat_int("likeCount"),
@@ -93,4 +98,51 @@ def fetch_youtube_api_metadata(url: str) -> RawMetadata | None:
         duration_seconds=_parse_iso8601_duration(content.get("duration") or ""),
         upload_date=upload_date,
         description=snippet.get("description") or "",
+    )
+
+
+def _fetch_channel_subscriber_count(api_key: str, channel_id: str) -> int | None:
+    try:
+        with httpx.Client(timeout=20.0) as client:
+            resp = client.get(
+                "https://www.googleapis.com/youtube/v3/channels",
+                params={
+                    "part": "statistics",
+                    "id": channel_id,
+                    "key": api_key,
+                },
+            )
+            resp.raise_for_status()
+            items = resp.json().get("items") or []
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("YouTube channel stats failed for %s: %s", channel_id, exc)
+        return None
+
+    if not items:
+        return None
+
+    stats = items[0].get("statistics") or {}
+    val = stats.get("subscriberCount")
+    if val is None:
+        return None
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def fetch_youtube_channel_metadata(channel_id: str) -> RawMetadata | None:
+    """Fetch subscriber count when we have a channel id but no full video API call."""
+    api_key = settings.youtube_api_key.strip()
+    if not api_key or not channel_id:
+        return None
+
+    followers = _fetch_channel_subscriber_count(api_key, channel_id)
+    if not followers:
+        return None
+
+    return RawMetadata(
+        platform=Platform.youtube,
+        follower_count=followers,
+        creator_url=f"https://www.youtube.com/channel/{channel_id}",
     )

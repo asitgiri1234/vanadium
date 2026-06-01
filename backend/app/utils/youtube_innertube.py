@@ -48,7 +48,7 @@ _INNERTUBE_CLIENTS: list[dict[str, Any]] = [
 
 _LIKE_RE = re.compile(r'"likeCount"\s*:\s*"(\d+)"')
 _COMMENT_RE = re.compile(r'"commentCount"\s*:\s*"(\d+)"')
-_VIEW_RE = re.compile(r'"viewCount"\s*:\s*"(\d+)"')
+_SUBSCRIBER_COUNT_RE = re.compile(r'"subscriberCount"\s*:\s*"(\d+)"')
 _DURATION_RE = re.compile(r'"lengthSeconds"\s*:\s*"(\d+)"')
 
 _HEADERS = {
@@ -102,6 +102,25 @@ def _regex_int(pattern: re.Pattern[str], blob: str) -> int | None:
         return None
 
 
+def _parse_subscriber_count(micro: dict[str, Any], blob: str) -> int | None:
+    raw = micro.get("subscriberCountText") or {}
+    if isinstance(raw, dict):
+        simple = raw.get("simpleText") or ""
+        digits = re.sub(r"[^\d]", "", simple)
+        if digits:
+            try:
+                return int(digits)
+            except ValueError:
+                pass
+    match = _SUBSCRIBER_COUNT_RE.search(blob)
+    if match:
+        try:
+            return int(match.group(1))
+        except ValueError:
+            pass
+    return None
+
+
 def _parse_innertube_response(data: dict[str, Any], video_id: str) -> RawMetadata | None:
     details = data.get("videoDetails") or {}
     micro = (data.get("microformat") or {}).get("playerMicroformatRenderer") or {}
@@ -127,6 +146,7 @@ def _parse_innertube_response(data: dict[str, Any], video_id: str) -> RawMetadat
         title=title or "Unknown title",
         creator=(details.get("author") or micro.get("ownerChannelName") or "Unknown creator").strip(),
         creator_url=f"https://www.youtube.com/channel/{channel_id}" if channel_id else None,
+        follower_count=_parse_subscriber_count(micro, blob) or 0,
         thumbnail=thumbnail,
         views=views,
         likes=likes,

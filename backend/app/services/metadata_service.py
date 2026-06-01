@@ -15,6 +15,7 @@ import httpx
 from app.core.logging import get_logger
 from app.models.raw_metadata import RawMetadata
 from app.models.schemas import Platform
+from app.utils.instagram_profile import fetch_instagram_profile_metadata
 from app.utils.text import extract_hashtags
 from app.utils.url_utils import detect_platform, extract_youtube_id
 from app.utils.youtube_cloud import is_youtube_cloud_host
@@ -134,6 +135,9 @@ class MetadataService:
         if platform == Platform.youtube:
             return self._fetch_youtube(url)
 
+        if platform == Platform.instagram:
+            return self._fetch_instagram(url)
+
         try:
             return self._fetch_with_ytdlp(url, platform)
         except Exception as exc:  # noqa: BLE001
@@ -205,6 +209,73 @@ class MetadataService:
             if oembed:
                 logger.info("YouTube metadata recovered via oEmbed for %s", url)
                 result = _merge_metadata(result, oembed)
+
+        if result.follower_count == 0:
+            channel_id = self._extract_youtube_channel_id(result)
+            if channel_id:
+                from app.utils.youtube_api import fetch_youtube_channel_metadata
+
+                channel_meta = fetch_youtube_channel_metadata(channel_id)
+                if channel_meta:
+                    result = _merge_metadata(result, channel_meta)
+
+        if cloud and (result.duration_seconds == 0 or result.follower_count == 0):
+            proxy_meta = self._fetch_youtube_metadata_proxy(video_id)
+            if proxy_meta:
+                logger.info("YouTube metadata enriched via frontend Data API proxy for %s", url)
+                result = _merge_metadata(result, proxy_meta)
+
+        return result
+
+    @staticmethod
+    def _extract_youtube_channel_id(raw: RawMetadata) -> str | None:
+        url = raw.creator_url or ""
+        if "/channel/" in url:
+            return url.split("/channel/")[-1].split("/")[0].split("?")[0]
+        info = raw.raw if isinstance(raw.raw, dict) else {}
+        channel_id = info.get("channel_id")
+        return str(channel_id) if channel_id else None
+
+    @staticmethod
+    def _fetch_youtube_metadata_proxy(video_id: str | None) -> RawMetadata | None:
+        if not video_id:
+            return None
+        payload = fetch_frontend_proxy("metadata", video_id)
+        if not payload or not payload.get("ok"):
+            return None
+        meta = payload.get("metadata")
+        if not isinstance(meta, dict):
+            return None
+        return RawMetadata(
+            platform=Platform.youtube,
+            title=meta.get("title") or "Unknown title",
+            creator=meta.get("creator") or "Unknown creator",
+            creator_url=meta.get("creator_url"),
+            follower_count=int(meta.get("follower_count") or 0),
+            thumbnail=meta.get("thumbnail"),
+            views=int(meta.get("views") or 0),
+            likes=int(meta["likes"]) if meta.get("likes") is not None else None,
+            comments=int(meta["comments"]) if meta.get("comments") is not None else None,
+            duration_seconds=int(meta.get("duration_seconds") or 0),
+            upload_date=meta.get("upload_date"),
+        )
+
+    def _fetch_instagram(self, url: str) -> RawMetadata:
+        try:
+            result = self._fetch_with_ytdlp(url, Platform.instagram)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Instagram metadata extraction failed for %s: %s", url, exc)
+            return RawMetadata(platform=Platform.instagram)
+
+        if result.follower_count == 0:
+            raw_info = result.raw if isinstance(result.raw, dict) else None
+            profile = fetch_instagram_profile_metadata(
+                result.creator_url,
+                raw_info.get("uploader_id") if raw_info else None,
+                raw_info,
+            )
+            if profile:
+                result = _merge_metadata(result, profile)
 
         return result
 
