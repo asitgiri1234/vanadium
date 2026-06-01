@@ -70,20 +70,32 @@ def fetch_youtube_web_metadata(url: str) -> YouTubeWebMetadata | None:
     if not video_id:
         return None
 
-    try:
-        with httpx.Client(
-            timeout=25.0,
-            follow_redirects=True,
-            headers={
-                "User-Agent": _WATCH_UA,
-                "Accept-Language": "en-US,en;q=0.9",
-            },
-        ) as client:
-            resp = client.get(f"https://www.youtube.com/watch?v={video_id}")
-            resp.raise_for_status()
-            html = resp.text
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("YouTube web scrape failed for %s: %s", url, exc)
+    watch_urls = [
+        f"https://m.youtube.com/watch?v={video_id}",
+        f"https://www.youtube.com/watch?v={video_id}",
+    ]
+    headers = {
+        "User-Agent": _WATCH_UA,
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+    # Bypass EU consent interstitial that strips player JSON on server-side fetches.
+    cookies = {"CONSENT": "YES+cb.20210328-17-p0.en+FX+667"}
+
+    html = ""
+    for watch_url in watch_urls:
+        try:
+            with httpx.Client(timeout=25.0, follow_redirects=True) as client:
+                resp = client.get(watch_url, headers=headers, cookies=cookies)
+                resp.raise_for_status()
+                html = resp.text
+            if _PLAYER_RE.search(html):
+                break
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("YouTube web scrape failed for %s: %s", watch_url, exc)
+            html = ""
+
+    if not html:
         return None
 
     player_match = _PLAYER_RE.search(html)
