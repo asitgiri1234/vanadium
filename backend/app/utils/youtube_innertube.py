@@ -147,7 +147,7 @@ def _parse_innertube_response(data: dict[str, Any], video_id: str) -> RawMetadat
         title=title or "Unknown title",
         creator=(details.get("author") or micro.get("ownerChannelName") or "Unknown creator").strip(),
         creator_url=f"https://www.youtube.com/channel/{channel_id}" if channel_id else None,
-        follower_count=_parse_subscriber_count(micro, blob) or 0,
+        follower_count=_parse_subscriber_count(micro, blob),
         thumbnail=thumbnail,
         views=views,
         likes=likes,

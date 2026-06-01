@@ -21,6 +21,8 @@ from app.core.logging import get_logger
 from app.models.schemas import Platform, VisualFrame
 from app.utils.llm_utils import content_to_text, parse_json_object
 from app.utils.text import clean_text, format_timestamp
+from app.utils.url_utils import extract_youtube_id
+from app.utils.instagram_media import download_instagram_thumbnails
 from app.utils.youtube_cloud import is_youtube_cloud_host
 from app.utils.youtube_thumbnails import download_youtube_frames_for_url
 from app.utils.ytdlp import base_ytdlp_opts
@@ -44,6 +46,9 @@ class VisualService:
             if platform == Platform.youtube and is_youtube_cloud_host():
                 frame_paths = self._youtube_thumbnail_frames(url, work_dir)
 
+            if platform == Platform.instagram and is_youtube_cloud_host():
+                frame_paths = self._instagram_thumbnail_frames(url, work_dir)
+
             if not frame_paths:
                 video_path = self._download_video(url, work_dir)
                 if video_path:
@@ -51,6 +56,9 @@ class VisualService:
 
             if not frame_paths and platform == Platform.youtube:
                 frame_paths = self._youtube_thumbnail_frames(url, work_dir)
+
+            if not frame_paths and platform == Platform.instagram:
+                frame_paths = self._instagram_thumbnail_frames(url, work_dir)
 
             if not frame_paths:
                 return [], "", ""
@@ -88,6 +96,17 @@ class VisualService:
         if not paths:
             return []
 
+        interval = 1.0
+        return [(i * interval, path) for i, path in enumerate(paths)]
+
+    def _instagram_thumbnail_frames(
+        self, url: str, work_dir: str
+    ) -> list[tuple[float, str]]:
+        """Cloud-safe Instagram frames via CDN thumbnail URLs."""
+        max_frames = max(1, settings.visual_max_frames)
+        paths = download_instagram_thumbnails(url, work_dir, max_frames=max_frames)
+        if not paths:
+            return []
         interval = 1.0
         return [(i * interval, path) for i, path in enumerate(paths)]
 

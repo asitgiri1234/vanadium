@@ -1,7 +1,7 @@
 """Transcript extraction.
 
-- **YouTube**: caption APIs with cloud fallbacks; optional Groq Whisper when enabled.
-- **Instagram Reels**: yt-dlp audio + Groq Whisper (or local Whisper).
+- **YouTube**: caption APIs (Vercel proxy on cloud) → **Groq Whisper** on audio if empty.
+- **Instagram Reels**: download audio → **Groq Whisper** (same GROQ_API_KEY).
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ class TranscriptService:
 
         raw = fetch_youtube_transcript_raw(url)
 
-        if not raw and settings.enable_whisper and not is_youtube_cloud_host():
+        if not raw and settings.enable_whisper:
             raw = self._fetch_youtube_whisper(url)
 
         if not raw and not is_youtube_cloud_host():
@@ -107,6 +107,8 @@ class TranscriptService:
     def _download_youtube_audio(url: str) -> str | None:
         from yt_dlp import YoutubeDL
 
+        from app.utils.youtube_media import download_youtube_audio
+
         tmp_dir = tempfile.mkdtemp(prefix="vanadium_yt_")
         out_tmpl = os.path.join(tmp_dir, "audio.%(ext)s")
         try:
@@ -117,10 +119,15 @@ class TranscriptService:
             with YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 path = ydl.prepare_filename(info)
-            return path if os.path.exists(path) else None
+            if os.path.exists(path):
+                return path
         except Exception as exc:  # noqa: BLE001
-            logger.warning("YouTube audio download failed for %s: %s", url, exc)
-            return None
+            logger.warning("YouTube audio download (yt-dlp) failed for %s: %s", url, exc)
+
+        direct_path = os.path.join(tmp_dir, "audio.m4a")
+        if download_youtube_audio(url, direct_path):
+            return direct_path
+        return None
 
     @staticmethod
     def _fetch_youtube_captions_ytdlp(url: str) -> list[dict]:
@@ -192,6 +199,8 @@ class TranscriptService:
     def _download_audio(url: str) -> str | None:
         from yt_dlp import YoutubeDL
 
+        from app.utils.instagram_media import download_instagram_audio
+
         tmp_dir = tempfile.mkdtemp(prefix="vanadium_")
         out_tmpl = os.path.join(tmp_dir, "audio.%(ext)s")
         opts = base_ytdlp_opts(format="bestaudio/best", outtmpl=out_tmpl)
@@ -199,10 +208,15 @@ class TranscriptService:
             with YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 path = ydl.prepare_filename(info)
-            return path if os.path.exists(path) else None
+            if os.path.exists(path):
+                return path
         except Exception as exc:  # noqa: BLE001
-            logger.warning("IG audio download failed for %s: %s", url, exc)
-            return None
+            logger.warning("IG audio download (yt-dlp) failed for %s: %s", url, exc)
+
+        direct_path = os.path.join(tmp_dir, "audio.m4a")
+        if download_instagram_audio(url, direct_path):
+            return direct_path
+        return None
 
     def _transcribe_groq(self, audio_path: str) -> list[TranscriptSegment]:
         from openai import OpenAI

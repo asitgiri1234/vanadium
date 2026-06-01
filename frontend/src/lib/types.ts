@@ -8,7 +8,7 @@ export interface VideoMetadata {
   title: string;
   creator: string;
   creator_url?: string | null;
-  follower_count: number;
+  follower_count?: number | null;
   thumbnail: string | null;
   views: number;
   likes: number | null;

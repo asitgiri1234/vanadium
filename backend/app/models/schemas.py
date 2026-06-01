@@ -11,6 +11,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.utils.metadata_display import fmt_followers, fmt_views
+
 VideoSlot = Literal["A", "B"]
 
 
@@ -33,7 +35,7 @@ class VideoMetadata(BaseModel):
     title: str = "Unknown title"
     creator: str = "Unknown creator"
     creator_url: Optional[str] = None
-    follower_count: int = 0
+    follower_count: Optional[int] = None
 
     thumbnail: Optional[str] = None
     views: int = 0
@@ -60,8 +62,8 @@ class VideoMetadata(BaseModel):
         return (
             f"Video {self.video_id} ({self.platform.value}). "
             f"Title: {self.title}. "
-            f"Creator: {self.creator} with {self.follower_count:,} followers. "
-            f"Views: {self.views:,}. Likes: {likes}. "
+            f"Creator: {self.creator} ({fmt_followers(self.follower_count, self.platform.value)}). "
+            f"Views: {fmt_views(self.views, self.platform.value)}. Likes: {likes}. "
             f"Comments: {comments}. "
             f"Engagement rate: {self.engagement_rate}%. "
             f"Duration: {self.duration_seconds} seconds. "

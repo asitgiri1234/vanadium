@@ -30,7 +30,7 @@ services:
       - key: ENABLE_WHISPER
         value: "true"
       - key: WHISPER_PROVIDER
-        value: auto
+        value: groq
       - key: GROQ_WHISPER_MODEL
         value: whisper-large-v3-turbo
       - key: WHISPER_MODEL

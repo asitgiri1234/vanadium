@@ -60,11 +60,19 @@ CORS_ORIGINS=https://your-app.vercel.app
 CHROMA_PERSIST_DIR=/data/chroma
 ANALYSIS_PERSIST_DIR=/data/analyses
 ENABLE_WHISPER=true
-WHISPER_PROVIDER=auto
+WHISPER_PROVIDER=groq
+GROQ_WHISPER_MODEL=whisper-large-v3-turbo
 ENABLE_VISUAL=true
 ```
 
-**Instagram Reels on Free tier:** Whisper now runs via **Groq's cloud API** (same `GROQ_API_KEY`) — not local PyTorch. Set `ENABLE_WHISPER=true` and `WHISPER_PROVIDER=auto`. No 4 GB RAM needed for transcription.
+**Transcription (Groq Whisper):** Uses the same `GROQ_API_KEY` — no local PyTorch needed.
+
+| Platform | Flow |
+|----------|------|
+| **Instagram Reels** | Download reel audio → Groq `whisper-large-v3-turbo` |
+| **YouTube** | Try captions (Vercel proxy) → if empty, download audio → Groq Whisper |
+
+Set `ENABLE_WHISPER=true` and `WHISPER_PROVIDER=groq` on Render.
 
 **Free instance limits:**
 - Persistent disk is **not available** on Free — analyses reset on redeploy. Upgrade to Starter+ and mount `/data` for persistence.
@@ -87,7 +95,7 @@ docker run --rm -p 8000:8000 \
   -e LLM_PROVIDER=groq \
   -e CORS_ORIGINS=http://localhost:3000 \
   -e ENABLE_WHISPER=true \
-  -e WHISPER_PROVIDER=auto \
+  -e WHISPER_PROVIDER=groq \
   -e ENABLE_VISUAL=true \
   vanadium-api
 curl http://localhost:8000/api/health
@@ -165,9 +173,95 @@ Manual checklist:
 | `CHROMA_PERSIST_DIR` | Yes in prod | `/data/chroma` with volume |
 | `ANALYSIS_PERSIST_DIR` | Yes in prod | `/data/analyses` with volume |
 | `OPENAI_API_KEY` | Recommended | Embeddings only |
-| `ENABLE_WHISPER` | For IG audio | `true` + ffmpeg in image |
+| `ENABLE_WHISPER` | Yes for IG + YT fallback | `true` — Groq Whisper (`GROQ_API_KEY`) |
+| `WHISPER_PROVIDER` | Yes with Whisper | `groq` (not `local`) |
+| `GROQ_WHISPER_MODEL` | Optional | `whisper-large-v3-turbo` |
 | `ENABLE_VISUAL` | For frame analysis | `true` |
-| `INSTAGRAM_COOKIES_FILE` | Often for IG | Netscape cookies file path |
+| `INSTAGRAM_COOKIES_FILE` | Recommended for IG | Netscape `cookies.txt` path on Render |
+
+---
+
+## Instagram session cookies (`cookies.txt`)
+
+Vanadium uses a **Netscape-format cookies file** so yt-dlp and profile API calls act as a logged-in browser. Use a **throwaway Instagram account** — never your main account.
+
+### Step 1 — Create / log into throwaway account
+
+1. In Chrome or Edge, open a **new profile** (optional but cleaner): `Settings → Profiles → Add profile`.
+2. Go to [instagram.com](https://www.instagram.com) and log in with your throwaway account.
+3. Confirm you can open a public profile and see follower counts in the browser.
+
+### Step 2 — Install cookie export extension
+
+**Chrome / Edge (recommended):**
+
+1. Open the extension store and search **“Get cookies.txt LOCALLY”** (by kairi003).
+   - Chrome: [Chrome Web Store listing](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
+2. Click **Add to Chrome** / **Get**.
+
+> Use “LOCALLY” — it exports on your machine only. Avoid extensions that upload cookies to third-party servers.
+
+**Firefox alternative:** **“cookies.txt”** by erik (exports Netscape format).
+
+### Step 3 — Export cookies for Instagram
+
+1. While logged into Instagram, go to **any** `https://www.instagram.com/...` page.
+2. Click the **Get cookies.txt LOCALLY** extension icon.
+3. Click **Export** / **Download** — save as `instagram_cookies.txt`.
+4. Open the file in a text editor. It should look like:
+
+```text
+# Netscape HTTP Cookie File
+.instagram.com	TRUE	/	TRUE	1735689600	sessionid	xxxx...
+.instagram.com	TRUE	/	TRUE	1735689600	csrftoken	xxxx...
+```
+
+5. **Required cookies:** at minimum you should see `sessionid` and `csrftoken` for `.instagram.com`. If those lines are missing, export again while on instagram.com and still logged in.
+
+### Step 4 — Local development
+
+1. Save the file somewhere **outside git**, e.g. `backend/secrets/instagram_cookies.txt`.
+2. Add to `backend/.env`:
+
+```env
+INSTAGRAM_COOKIES_FILE=./secrets/instagram_cookies.txt
+```
+
+3. Restart the backend. Logs should show: `yt-dlp: using cookies file ...`
+
+### Step 5 — Production (Render)
+
+**Option A — Secret file (recommended)**
+
+1. Render dashboard → your **vanadium-api** service → **Environment**.
+2. Scroll to **Secret Files** → **Add Secret File**.
+3. **Filename:** `instagram_cookies.txt`
+4. Paste the **entire contents** of your exported file.
+5. Add environment variable:
+
+```env
+INSTAGRAM_COOKIES_FILE=/etc/secrets/instagram_cookies.txt
+```
+
+6. **Save Changes** → Render redeploys automatically.
+
+**Option B — Mount via shell (one-off test)**
+
+Not recommended for long-term; Secret Files are easier to rotate.
+
+### Step 6 — Verify
+
+1. Re-run an Instagram reel analysis on production.
+2. Check Render logs for `Instagram followers for @handle` or `yt-dlp: using cookies file`.
+3. Follower count should appear on the video card (not blank); transcripts should populate via Groq Whisper.
+
+### Cookie hygiene
+
+| Do | Don't |
+|----|-------|
+| Use a throwaway IG account | Use your personal/business account |
+| Re-export every **4–8 weeks** (sessions expire) | Commit `cookies.txt` to GitHub |
+| Rotate if IG forces re-login | Share the file publicly |
 
 ---
 
@@ -197,8 +291,11 @@ Backend plan too small or cold start; upgrade RAM or disable Whisper for YouTube
 **Render build fails immediately ("status 1")**  
 Runtime is not Docker. Delete the service, recreate with **Runtime → Docker**. Do not use Node or Python native runtime.
 
-**Instagram views = 0**  
-Set `INSTAGRAM_COOKIES_FILE` with exported session cookies.
+**Instagram views hidden / 0 followers / no transcript**  
+Set `INSTAGRAM_COOKIES_FILE` (see [Instagram session cookies](#instagram-session-cookies-cookiestxt)). Ensure `ENABLE_WHISPER=true` and `GROQ_API_KEY` is set for reel audio → Groq Whisper.
+
+**YouTube transcript empty on production**  
+Captions are fetched via Vercel proxy first; if that fails, Groq Whisper transcribes downloaded audio. Confirm `ENABLE_WHISPER=true`, `WHISPER_PROVIDER=groq`, and redeploy **both** Vercel and Render.
 
 **Empty RAG answers**  
 Add `OPENAI_API_KEY` for real embeddings; Groq-only uses hash fallback.

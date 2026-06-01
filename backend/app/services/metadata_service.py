@@ -15,7 +15,9 @@ import httpx
 from app.core.logging import get_logger
 from app.models.raw_metadata import RawMetadata
 from app.models.schemas import Platform
-from app.utils.instagram_profile import fetch_instagram_profile_metadata
+from app.utils.instagram_profile import fetch_instagram_profile_metadata, _extract_handle
+from app.utils.instagram_proxy import fetch_instagram_profile_proxy
+from app.utils.metadata_display import coalesce_count, followers_known
 from app.utils.text import extract_hashtags
 from app.utils.url_utils import detect_platform, extract_youtube_id
 from app.utils.youtube_cloud import is_youtube_cloud_host
@@ -34,6 +36,11 @@ def _as_int(value: Any) -> int:
         return int(value) if value is not None else 0
     except (TypeError, ValueError):
         return 0
+
+
+def _as_optional_positive(value: Any) -> int | None:
+    n = _as_int(value)
+    return n if n > 0 else None
 
 
 def _as_metric_int(value: Any) -> int | None:
@@ -100,7 +107,7 @@ def _merge_metadata(base: RawMetadata, patch: RawMetadata) -> RawMetadata:
         title=base.title if base.title != "Unknown title" else patch.title,
         creator=base.creator if base.creator != "Unknown creator" else patch.creator,
         creator_url=base.creator_url or patch.creator_url,
-        follower_count=base.follower_count or patch.follower_count,
+        follower_count=coalesce_count(base.follower_count, patch.follower_count),
         thumbnail=base.thumbnail or patch.thumbnail,
         views=base.views or patch.views,
         likes=base.likes if base.likes is not None else patch.likes,
@@ -210,7 +217,7 @@ class MetadataService:
                 logger.info("YouTube metadata recovered via oEmbed for %s", url)
                 result = _merge_metadata(result, oembed)
 
-        if result.follower_count == 0:
+        if not followers_known(result.follower_count):
             channel_id = self._extract_youtube_channel_id(result)
             if channel_id:
                 from app.utils.youtube_api import fetch_youtube_channel_metadata
@@ -219,7 +226,9 @@ class MetadataService:
                 if channel_meta:
                     result = _merge_metadata(result, channel_meta)
 
-        if cloud and (result.duration_seconds == 0 or result.follower_count == 0):
+        if cloud and (
+            result.duration_seconds == 0 or not followers_known(result.follower_count)
+        ):
             proxy_meta = self._fetch_youtube_metadata_proxy(video_id)
             if proxy_meta:
                 logger.info("YouTube metadata enriched via frontend Data API proxy for %s", url)
@@ -251,7 +260,7 @@ class MetadataService:
             title=meta.get("title") or "Unknown title",
             creator=meta.get("creator") or "Unknown creator",
             creator_url=meta.get("creator_url"),
-            follower_count=int(meta.get("follower_count") or 0),
+            follower_count=_as_optional_positive(meta.get("follower_count")),
             thumbnail=meta.get("thumbnail"),
             views=int(meta.get("views") or 0),
             likes=int(meta["likes"]) if meta.get("likes") is not None else None,
@@ -267,13 +276,28 @@ class MetadataService:
             logger.warning("Instagram metadata extraction failed for %s: %s", url, exc)
             return RawMetadata(platform=Platform.instagram)
 
-        if result.follower_count == 0:
+        if not followers_known(result.follower_count):
             raw_info = result.raw if isinstance(result.raw, dict) else None
-            profile = fetch_instagram_profile_metadata(
+            handle = _extract_handle(
                 result.creator_url,
                 raw_info.get("uploader_id") if raw_info else None,
-                raw_info,
             )
+            if not handle and raw_info:
+                handle = _extract_handle(
+                    raw_info.get("uploader_url") or raw_info.get("channel_url"),
+                    raw_info.get("uploader_id") or raw_info.get("channel"),
+                )
+
+            profile = None
+            if is_youtube_cloud_host() and handle:
+                profile = fetch_instagram_profile_proxy(handle)
+
+            if not profile:
+                profile = fetch_instagram_profile_metadata(
+                    result.creator_url,
+                    raw_info.get("uploader_id") if raw_info else None,
+                    raw_info,
+                )
             if profile:
                 result = _merge_metadata(result, profile)
 
@@ -347,7 +371,7 @@ class MetadataService:
             title=info.get("title") or "Unknown title",
             creator=creator,
             creator_url=_creator_profile_url(info, platform),
-            follower_count=_as_int(
+            follower_count=_as_optional_positive(
                 info.get("channel_follower_count") or info.get("uploader_subscriber_count")
             ),
             thumbnail=info.get("thumbnail"),

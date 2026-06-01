@@ -102,7 +102,7 @@ export function VideoCard({ video }: { video: VideoMetadata }) {
           ) : (
             <span>{video.creator}</span>
           )}
-          {video.follower_count > 0 && (
+          {video.follower_count != null && video.follower_count > 0 && (
             <span className="font-mono text-xs">
               · {formatNumber(video.follower_count)} followers
             </span>

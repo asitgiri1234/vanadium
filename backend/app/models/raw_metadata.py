@@ -14,7 +14,7 @@ class RawMetadata:
     title: str = "Unknown title"
     creator: str = "Unknown creator"
     creator_url: str | None = None
-    follower_count: int = 0
+    follower_count: int | None = None
     thumbnail: Optional[str] = None
     views: int = 0
     likes: int | None = None

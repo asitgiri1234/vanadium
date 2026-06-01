@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.models.schemas import AnalysisSnapshot, Citation, ComparisonInsights, VideoMetadata
+from app.utils.metadata_display import fmt_engagement, fmt_followers, fmt_views
 from app.utils.performance import (
     determine_winner,
     performance_delta,
@@ -26,6 +27,9 @@ using the handles shown in the evidence. Visual evidence uses [A#visual] or [B#v
 on-screen text, visuals, and engagement — not just raw numbers.
 - If evidence is missing (e.g. no transcript), say so plainly instead of \
 inventing details.
+- When metadata shows unknown/hidden/unavailable for Instagram followers or views, \
+do NOT interpret that as zero reach or a tiny audience — the platform often hides \
+those numbers without login.
 - Keep answers concise, skimmable, and oriented toward helping the creator \
 improve future content.
 """
@@ -36,9 +40,9 @@ def _metadata_block(v: VideoMetadata) -> str:
     return (
         f"Video {v.video_id} ({v.platform.value})\n"
         f"  title: {v.title}\n"
-        f"  creator: {v.creator} (followers: {v.follower_count:,})\n"
-        f"  views: {v.views:,} | likes: {v.likes if v.likes is not None else 'unavailable'} | comments: {v.comments if v.comments is not None else 'unavailable'}\n"
-        f"  engagement_rate: {v.engagement_rate}%\n"
+        f"  creator: {v.creator} (followers: {fmt_followers(v.follower_count, v.platform.value)})\n"
+        f"  views: {fmt_views(v.views, v.platform.value)} | likes: {v.likes if v.likes is not None else 'unavailable'} | comments: {v.comments if v.comments is not None else 'unavailable'}\n"
+        f"  engagement_rate: {fmt_engagement(v.engagement_rate, v.views, v.platform.value)}\n"
         f"  duration: {v.duration_seconds}s | uploaded: {v.upload_date or 'unknown'}\n"
         f"  hashtags: {tags}\n"
         f"  transcript_available: {v.transcript_available}"

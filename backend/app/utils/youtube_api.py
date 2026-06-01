@@ -81,9 +81,9 @@ def fetch_youtube_api_metadata(url: str) -> RawMetadata | None:
     published = snippet.get("publishedAt") or ""
     upload_date = published[:10] if len(published) >= 10 else None
 
-    follower_count = 0
+    follower_count: int | None = None
     if channel_id:
-        follower_count = _fetch_channel_subscriber_count(api_key, channel_id) or 0
+        follower_count = _fetch_channel_subscriber_count(api_key, channel_id)
 
     return RawMetadata(
         platform=Platform.youtube,

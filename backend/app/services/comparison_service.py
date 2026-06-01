@@ -21,6 +21,7 @@ from app.models.schemas import (
     VideoVisual,
 )
 from app.utils.formatting import fmt_count
+from app.utils.metadata_display import fmt_engagement, fmt_followers, fmt_views
 from app.utils.llm_utils import content_to_text, parse_json_object
 from app.utils.performance import determine_winner, performance_delta, winner_lead_summary
 from app.utils.text import clean_text, first_n_seconds_text, has_cta, keywords
@@ -242,9 +243,9 @@ class ComparisonService:
 
 VIDEO A ({a.platform.value})
 - title: {a.title}
-- creator: {a.creator} ({a.follower_count:,} followers)
-- views: {a.views:,} | likes: {fmt_count(a.likes)} | comments: {fmt_count(a.comments)}
-- engagement rate: {a.engagement_rate}%
+- creator: {a.creator} ({fmt_followers(a.follower_count, a.platform.value)})
+- views: {fmt_views(a.views, a.platform.value)} | likes: {fmt_count(a.likes)} | comments: {fmt_count(a.comments)}
+- engagement rate: {fmt_engagement(a.engagement_rate, a.views, a.platform.value)}
 - duration: {a.duration_seconds}s
 - hook (first 5s): {hook_a or "n/a"}
 - CTA present: {cta_a}
@@ -253,9 +254,9 @@ VIDEO A ({a.platform.value})
 
 VIDEO B ({b.platform.value})
 - title: {b.title}
-- creator: {b.creator} ({b.follower_count:,} followers)
-- views: {b.views:,} | likes: {fmt_count(b.likes)} | comments: {fmt_count(b.comments)}
-- engagement rate: {b.engagement_rate}%
+- creator: {b.creator} ({fmt_followers(b.follower_count, b.platform.value)})
+- views: {fmt_views(b.views, b.platform.value)} | likes: {fmt_count(b.likes)} | comments: {fmt_count(b.comments)}
+- engagement rate: {fmt_engagement(b.engagement_rate, b.views, b.platform.value)}
 - duration: {b.duration_seconds}s
 - hook (first 5s): {hook_b or "n/a"}
 - CTA present: {cta_b}
@@ -277,6 +278,10 @@ Respond with valid JSON only (no markdown fences):
                 SystemMessage(content=(
                     "You are Vanadium, an expert AI content strategist. "
                     "Compare videos with evidence-backed, creator-friendly advice. "
+                    "When follower counts or view counts are labeled unknown, hidden, or "
+                    "unavailable — especially on Instagram — never treat them as zero or "
+                    "infer the creator has no audience. Do not cite 0 followers or 0 views "
+                    "as factual reach unless explicitly confirmed. "
                     "Respond with valid JSON only."
                 )),
                 HumanMessage(content=user_content),

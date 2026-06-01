@@ -146,7 +146,7 @@ class IngestionService:
             title=raw.title,
             creator=raw.creator,
             creator_url=raw.creator_url,
-            follower_count=raw.follower_count,
+            follower_count=raw.follower_count if raw.follower_count and raw.follower_count > 0 else None,
             thumbnail=raw.thumbnail,
             views=raw.views,
             likes=raw.likes,

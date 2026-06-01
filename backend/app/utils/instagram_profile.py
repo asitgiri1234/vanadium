@@ -11,6 +11,7 @@ import httpx
 from app.core.logging import get_logger
 from app.models.raw_metadata import RawMetadata
 from app.models.schemas import Platform
+from app.utils.cookie_utils import cookie_header_for_url
 from app.utils.ytdlp import base_ytdlp_opts
 
 logger = get_logger(__name__)
@@ -66,20 +67,23 @@ def _followers_from_ytdlp_profile(handle: str) -> int | None:
 
 
 def _followers_from_web_profile(handle: str) -> int | None:
+    api_url = "https://www.instagram.com/api/v1/users/web_profile_info/"
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "x-ig-app-id": _IG_APP_ID,
+        "Accept": "*/*",
+        **cookie_header_for_url("https://www.instagram.com/"),
+    }
     try:
         with httpx.Client(timeout=20.0, follow_redirects=True) as client:
             resp = client.get(
-                "https://www.instagram.com/api/v1/users/web_profile_info/",
+                api_url,
                 params={"username": handle},
-                headers={
-                    "User-Agent": (
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/120.0.0.0 Safari/537.36"
-                    ),
-                    "x-ig-app-id": _IG_APP_ID,
-                    "Accept": "*/*",
-                },
+                headers=headers,
             )
             if resp.status_code != 200:
                 return None
@@ -99,18 +103,18 @@ def _followers_from_web_profile(handle: str) -> int | None:
 
 
 def _followers_from_profile_html(handle: str) -> int | None:
+    profile_url = f"https://www.instagram.com/{handle}/"
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        **cookie_header_for_url(profile_url),
+    }
     try:
         with httpx.Client(timeout=20.0, follow_redirects=True) as client:
-            resp = client.get(
-                f"https://www.instagram.com/{handle}/",
-                headers={
-                    "User-Agent": (
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/120.0.0.0 Safari/537.36"
-                    ),
-                },
-            )
+            resp = client.get(profile_url, headers=headers)
             resp.raise_for_status()
             html = resp.text
     except Exception as exc:  # noqa: BLE001
