@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from app.services.metadata_service import metadata_service
+from app.utils.youtube_engagement import fetch_youtube_engagement_stats
 from app.utils.youtube_innertube import fetch_youtube_innertube_metadata
 from app.utils.youtube_web import fetch_youtube_web_metadata
 
@@ -16,6 +17,7 @@ async def debug_youtube_metadata(url: str = Query(..., description="YouTube watc
     """Probe which YouTube metadata sources succeed (for production diagnostics)."""
     innertube = fetch_youtube_innertube_metadata(url)
     web = fetch_youtube_web_metadata(url)
+    engagement = fetch_youtube_engagement_stats(url)
     merged = metadata_service.fetch(url)
 
     return {
@@ -31,6 +33,11 @@ async def debug_youtube_metadata(url: str = Query(..., description="YouTube watc
             "ok": web is not None,
             "views": web.views if web else 0,
             "duration": web.duration_seconds if web else 0,
+        },
+        "engagement_api": {
+            "ok": engagement is not None,
+            "views": engagement.views if engagement else 0,
+            "likes": engagement.likes if engagement else None,
         },
         "merged": {
             "views": merged.views,

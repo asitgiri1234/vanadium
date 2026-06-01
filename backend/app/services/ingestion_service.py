@@ -125,6 +125,11 @@ class IngestionService:
         raw = metadata_service.fetch(url)
         segments = transcript_service.fetch(url, platform)
 
+        duration = raw.duration_seconds
+        if duration == 0 and segments:
+            last = max(segments, key=lambda s: s.start + s.duration)
+            duration = int(last.start + last.duration)
+
         engagement = compute_engagement_rate(raw.likes, raw.comments, raw.views)
 
         chunks = chunking_service.chunk(segments, analysis_id, slot, platform)
@@ -146,7 +151,7 @@ class IngestionService:
             views=raw.views,
             likes=raw.likes,
             comments=raw.comments,
-            duration_seconds=raw.duration_seconds,
+            duration_seconds=duration,
             upload_date=raw.upload_date,
             hashtags=raw.hashtags,
             engagement_rate=engagement,

@@ -17,6 +17,7 @@ from app.models.raw_metadata import RawMetadata
 from app.models.schemas import Platform
 from app.utils.text import extract_hashtags
 from app.utils.url_utils import detect_platform
+from app.utils.youtube_engagement import fetch_youtube_engagement_stats
 from app.utils.youtube_innertube import fetch_youtube_innertube_metadata
 from app.utils.youtube_web import YouTubeWebMetadata, fetch_youtube_web_metadata
 from app.utils.ytdlp import base_ytdlp_opts
@@ -80,8 +81,8 @@ def _metadata_is_empty(raw: RawMetadata) -> bool:
 
 
 def _youtube_needs_enrichment(raw: RawMetadata) -> bool:
-    """True when engagement fields are still missing after primary extraction."""
-    return _metadata_is_empty(raw) or raw.views == 0 or raw.duration_seconds == 0
+    """True when core fields are still missing (views are the critical metric)."""
+    return _metadata_is_empty(raw) or raw.views == 0
 
 
 def _merge_metadata(base: RawMetadata, patch: RawMetadata) -> RawMetadata:
@@ -152,6 +153,12 @@ class MetadataService:
             if web:
                 logger.info("YouTube metadata enriched via web scrape for %s", url)
                 result = _merge_metadata(result, _web_to_raw(web, Platform.youtube))
+
+        if _youtube_needs_enrichment(result):
+            engagement = fetch_youtube_engagement_stats(url)
+            if engagement:
+                logger.info("YouTube metadata enriched via engagement API for %s", url)
+                result = _merge_metadata(result, engagement)
 
         if _youtube_needs_enrichment(result):
             from app.utils.youtube_api import fetch_youtube_api_metadata
