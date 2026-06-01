@@ -17,6 +17,7 @@ from app.core.logging import get_logger
 from app.models.schemas import Platform
 from app.utils.text import extract_hashtags
 from app.utils.url_utils import detect_platform
+from app.utils.youtube_web import YouTubeWebMetadata, fetch_youtube_web_metadata
 from app.utils.ytdlp import base_ytdlp_opts
 
 logger = get_logger(__name__)
@@ -97,6 +98,47 @@ def _metadata_is_empty(raw: RawMetadata) -> bool:
     return raw.title == "Unknown title" and raw.creator == "Unknown creator"
 
 
+def _youtube_needs_web_fallback(raw: RawMetadata) -> bool:
+    """True when yt-dlp missed engagement fields (common on cloud/datacenter IPs)."""
+    return _metadata_is_empty(raw) or raw.views == 0 or raw.duration_seconds == 0
+
+
+def _merge_metadata(base: RawMetadata, patch: RawMetadata) -> RawMetadata:
+    """Fill missing fields on ``base`` from ``patch`` without overwriting good data."""
+    return RawMetadata(
+        platform=base.platform,
+        title=base.title if base.title != "Unknown title" else patch.title,
+        creator=base.creator if base.creator != "Unknown creator" else patch.creator,
+        creator_url=base.creator_url or patch.creator_url,
+        follower_count=base.follower_count or patch.follower_count,
+        thumbnail=base.thumbnail or patch.thumbnail,
+        views=base.views or patch.views,
+        likes=base.likes if base.likes is not None else patch.likes,
+        comments=base.comments if base.comments is not None else patch.comments,
+        duration_seconds=base.duration_seconds or patch.duration_seconds,
+        upload_date=base.upload_date or patch.upload_date,
+        hashtags=base.hashtags or patch.hashtags,
+        description=base.description or patch.description,
+        raw=base.raw or patch.raw,
+    )
+
+
+def _web_to_raw(web: YouTubeWebMetadata, platform: Platform) -> RawMetadata:
+    return RawMetadata(
+        platform=platform,
+        title=web.title,
+        creator=web.creator,
+        creator_url=web.creator_url,
+        thumbnail=web.thumbnail,
+        views=web.views,
+        likes=web.likes,
+        comments=web.comments,
+        duration_seconds=web.duration_seconds,
+        upload_date=web.upload_date,
+        description=web.description,
+    )
+
+
 class MetadataService:
     def fetch(self, url: str) -> RawMetadata:
         platform = detect_platform(url)
@@ -106,11 +148,17 @@ class MetadataService:
             logger.warning("Metadata extraction failed for %s: %s", url, exc)
             result = RawMetadata(platform=platform)
 
+        if platform == Platform.youtube and _youtube_needs_web_fallback(result):
+            web = fetch_youtube_web_metadata(url)
+            if web:
+                logger.info("YouTube metadata enriched via web scrape for %s", url)
+                result = _merge_metadata(result, _web_to_raw(web, platform))
+
         if platform == Platform.youtube and _metadata_is_empty(result):
             oembed = self._fetch_youtube_oembed(url)
             if oembed:
                 logger.info("YouTube metadata recovered via oEmbed for %s", url)
-                return oembed
+                result = _merge_metadata(result, oembed)
 
         return result
 
