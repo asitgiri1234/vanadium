@@ -23,5 +23,6 @@ async def health() -> HealthResponse:
         groq_configured=settings.groq_configured,
         whisper_enabled=settings.enable_whisper,
         whisper_provider=backend or "none",
+        apify_configured=bool(settings.apify_api_key.strip()),
         visual_enabled=settings.enable_visual,
     )

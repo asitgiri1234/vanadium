@@ -90,6 +90,13 @@ class Settings(BaseSettings):
     # SerpApi — reliable YouTube transcripts from datacenter IPs (serpapi.com).
     serp_api_key: str = Field(default="", alias="SERP_API_KEY")
 
+    # Apify — Instagram reel transcripts (apify.com).
+    apify_api_key: str = Field(default="", alias="APIFY_API_KEY")
+    apify_instagram_transcript_actor: str = Field(
+        default="",
+        alias="APIFY_IG_TRANSCRIPT_ACTOR",
+    )
+
     # Vercel frontend URL for YouTube proxy routes when datacenter APIs return 403.
     frontend_proxy_url: str = Field(default="", alias="FRONTEND_PROXY_URL")
 

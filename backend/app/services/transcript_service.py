@@ -200,6 +200,21 @@ class TranscriptService:
     def _instagram(
         self, url: str, ig_media: dict | None = None
     ) -> list[TranscriptSegment]:
+        from app.utils.instagram_apify import fetch_instagram_transcript_apify
+
+        if settings.apify_api_key.strip():
+            raw = fetch_instagram_transcript_apify(url)
+            if raw:
+                return [
+                    TranscriptSegment(
+                        text=(item.get("text") or "").strip(),
+                        start=float(item.get("start", 0.0) or 0.0),
+                        duration=float(item.get("duration", 0.0) or 0.0),
+                    )
+                    for item in raw
+                    if (item.get("text") or "").strip()
+                ]
+
         backend = self.resolve_whisper_backend()
         if not backend:
             logger.info(

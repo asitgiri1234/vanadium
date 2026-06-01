@@ -55,5 +55,9 @@ services:
         sync: false
       - key: SERP_API_KEY
         sync: false
+      - key: APIFY_API_KEY
+        sync: false
+      - key: APIFY_IG_TRANSCRIPT_ACTOR
+        sync: false
       - key: FRONTEND_PROXY_URL
         value: https://vanadium-delta.vercel.app

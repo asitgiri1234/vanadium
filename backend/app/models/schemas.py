@@ -152,6 +152,7 @@ class HealthResponse(BaseModel):
     groq_configured: bool = False
     whisper_enabled: bool = False
     whisper_provider: str = "none"
+    apify_configured: bool = False
     visual_enabled: bool = False
 
 

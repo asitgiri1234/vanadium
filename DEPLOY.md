@@ -306,5 +306,8 @@ Set `SERP_API_KEY` (SerpApi [YouTube Video Transcript](https://serpapi.com/youtu
 **Instagram likes/comments still N/A**  
 Set `INSTAGRAM_COOKIES_FILE` on Render **and** `INSTAGRAM_COOKIE` on Vercel (see cookies section). Re-run Analyze after deploy — old analyses keep stale metadata.
 
+**Instagram transcript empty**  
+Set `APIFY_API_KEY` on Render (Apify → Settings → Integrations). Uses `crawlerbros/instagram-transcript-scraper` by default. Optional: `APIFY_IG_TRANSCRIPT_ACTOR=your-actor~id`. Falls back to Groq Whisper if Apify returns nothing.
+
 **Empty RAG answers**  
 Add `OPENAI_API_KEY` for real embeddings; Groq-only uses hash fallback.
