@@ -118,10 +118,19 @@ class TranscriptService:
     def _download_youtube_audio(url: str) -> str | None:
         from yt_dlp import YoutubeDL
 
+        from app.utils.youtube_cloud import is_youtube_cloud_host
+        from app.utils.youtube_innertube_audio import download_youtube_audio_innertube
         from app.utils.youtube_media import download_youtube_audio
 
         tmp_dir = tempfile.mkdtemp(prefix="vanadium_yt_")
         out_tmpl = os.path.join(tmp_dir, "audio.%(ext)s")
+
+        if is_youtube_cloud_host():
+            for ext in ("m4a", "webm", "mp4"):
+                innertube_path = os.path.join(tmp_dir, f"innertube.{ext}")
+                if download_youtube_audio_innertube(url, innertube_path):
+                    return innertube_path
+
         try:
             opts = base_ytdlp_opts(
                 format="bestaudio/best",
@@ -135,9 +144,12 @@ class TranscriptService:
         except Exception as exc:  # noqa: BLE001
             logger.warning("YouTube audio download (yt-dlp) failed for %s: %s", url, exc)
 
-        direct_path = os.path.join(tmp_dir, "audio.m4a")
-        if download_youtube_audio(url, direct_path):
-            return direct_path
+        for ext in ("m4a", "webm", "mp4"):
+            direct_path = os.path.join(tmp_dir, f"audio.{ext}")
+            if download_youtube_audio(url, direct_path):
+                return direct_path
+            if download_youtube_audio_innertube(url, direct_path):
+                return direct_path
         return None
 
     @staticmethod

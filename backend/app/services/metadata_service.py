@@ -17,6 +17,10 @@ from app.models.raw_metadata import RawMetadata
 from app.models.schemas import Platform
 from app.utils.instagram_embed import fetch_instagram_fallback_metadata
 from app.utils.instagram_profile import fetch_instagram_profile_metadata, _extract_handle
+from app.utils.instagram_media_api import (
+    fetch_instagram_media_info,
+    media_info_to_raw,
+)
 from app.utils.instagram_page_media import extract_instagram_media_urls
 from app.utils.instagram_reel_proxy import fetch_instagram_reel_proxy, reel_proxy_to_raw
 from app.utils.instagram_proxy import fetch_instagram_profile_proxy
@@ -275,6 +279,17 @@ class MetadataService:
     def _fetch_instagram(self, url: str) -> RawMetadata:
         result = RawMetadata(platform=Platform.instagram)
         media_hints: dict[str, Any] = {}
+
+        # Authenticated media API — most reliable source for likes/comments + video CDN.
+        media_info = fetch_instagram_media_info(url)
+        if media_info:
+            result = _merge_metadata(result, media_info_to_raw(media_info))
+            if media_info.get("video_urls"):
+                media_hints["ig_video_urls"] = list(media_info["video_urls"])
+            if media_info.get("thumbnail_urls"):
+                media_hints["ig_thumbnail_urls"] = list(media_info["thumbnail_urls"])
+            if media_info.get("thumbnail_url"):
+                media_hints["thumbnail_url"] = media_info["thumbnail_url"]
 
         if is_youtube_cloud_host():
             proxy = fetch_instagram_reel_proxy(url)

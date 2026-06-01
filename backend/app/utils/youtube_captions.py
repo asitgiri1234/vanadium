@@ -124,24 +124,52 @@ def _parse_vtt(vtt: str) -> list[dict]:
 def _fetch_caption_url(url: str) -> list[dict]:
     try:
         with httpx.Client(timeout=30.0, follow_redirects=True) as client:
-            for suffix in ("&fmt=json3", "&fmt=vtt", ""):
-                resp = client.get(
-                    url + suffix,
-                    headers={"User-Agent": _WATCH_UA},
-                )
+            headers = {"User-Agent": _WATCH_UA, "Accept-Language": "en-US,en;q=0.9"}
+            for suffix in ("&fmt=json3", "&fmt=vtt", "&fmt=srv3", ""):
+                resp = client.get(url + suffix, headers=headers)
                 if resp.status_code != 200 or not resp.content:
                     continue
-                if "json3" in suffix or resp.text.strip().startswith("{"):
+                text = resp.text
+                if "json3" in suffix or text.strip().startswith("{"):
                     parsed = _parse_json3_events(resp.content)
                     if parsed:
                         return parsed
-                if "vtt" in suffix or resp.text.strip().startswith("WEBVTT"):
-                    parsed = _parse_vtt(resp.text)
+                if "vtt" in suffix or text.strip().startswith("WEBVTT"):
+                    parsed = _parse_vtt(text)
+                    if parsed:
+                        return parsed
+                if "<text" in text:
+                    parsed = _parse_xml_captions(text)
                     if parsed:
                         return parsed
     except Exception as exc:  # noqa: BLE001
         logger.warning("Caption download failed for %s: %s", url[:80], exc)
     return []
+
+
+def _parse_xml_captions(raw: str) -> list[dict]:
+    """Parse YouTube timedtext XML (<text start=...>)."""
+    segments: list[dict] = []
+    for match in re.finditer(
+        r'<text start="([^"]+)"[^>]*>([\s\S]*?)</text>', raw
+    ):
+        try:
+            start = float(match.group(1))
+        except ValueError:
+            start = 0.0
+        text = (
+            match.group(2)
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&#39;", "'")
+            .replace("&quot;", '"')
+            .replace("\n", " ")
+            .strip()
+        )
+        if text:
+            segments.append({"text": text, "start": start, "duration": 0.0})
+    return segments
 
 
 def _fetch_from_innertube(video_id: str) -> list[dict]:

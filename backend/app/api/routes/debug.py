@@ -8,6 +8,8 @@ from fastapi import APIRouter, Query
 from app.services.metadata_service import metadata_service
 from app.utils.cookie_utils import cookies_configured
 from app.utils.instagram_embed import fetch_instagram_fallback_metadata
+from app.utils.instagram_media_api import fetch_instagram_media_info
+from app.utils.instagram_page_media import extract_instagram_media_urls
 from app.utils.url_utils import extract_youtube_id
 from app.utils.youtube_captions import fetch_youtube_transcript_raw
 from app.utils.youtube_cloud import is_youtube_cloud_host
@@ -140,15 +142,25 @@ async def debug_youtube_metadata(url: str = Query(..., description="YouTube watc
 async def debug_instagram_metadata(url: str = Query(..., description="Instagram reel URL")):
     merged = metadata_service.fetch(url)
     fallback = fetch_instagram_fallback_metadata(url)
+    media_info = fetch_instagram_media_info(url)
+    scraped = extract_instagram_media_urls(url)
     return {
         "url": url,
         "cloud_host": is_youtube_cloud_host(),
         "cookies_configured": cookies_configured(),
+        "media_api": media_info,
+        "page_scrape": {
+            "like_count": scraped.get("like_count"),
+            "comment_count": scraped.get("comment_count"),
+            "video_urls": len(scraped.get("video_urls") or []),
+        },
         "fallback": {
             "ok": fallback is not None,
             "title": fallback.title if fallback else None,
             "creator": fallback.creator if fallback else None,
             "thumbnail": bool(fallback.thumbnail) if fallback else False,
+            "likes": fallback.likes if fallback else None,
+            "comments": fallback.comments if fallback else None,
         },
         "merged": {
             "title": merged.title,
@@ -156,6 +168,10 @@ async def debug_instagram_metadata(url: str = Query(..., description="Instagram 
             "follower_count": merged.follower_count,
             "views": merged.views,
             "likes": merged.likes,
+            "comments": merged.comments,
             "thumbnail": bool(merged.thumbnail),
+            "ig_video_urls": len((merged.raw or {}).get("ig_video_urls") or [])
+            if isinstance(merged.raw, dict)
+            else 0,
         },
     }

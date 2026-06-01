@@ -129,9 +129,36 @@ export async function GET(request: NextRequest) {
     const combinedHtml = `${embedHtml}\n${watchHtml}`;
 
     const { videoUrls, thumbUrls } = extractUrls(combinedHtml);
-    const engagement = extractEngagement(combinedHtml);
+    let engagement = extractEngagement(combinedHtml);
+    let mediaTitle: string | null = null;
 
-    const title = oembed?.title ?? null;
+    try {
+      const mediaUrl = new URL("/api/instagram/media", request.url);
+      mediaUrl.searchParams.set("url", reelUrl);
+      const mediaResp = await fetch(mediaUrl.toString(), { cache: "no-store" });
+      if (mediaResp.ok) {
+        const media = await mediaResp.json();
+        if (media?.ok) {
+          engagement = {
+            like_count: media.like_count ?? engagement.like_count,
+            comment_count: media.comment_count ?? engagement.comment_count,
+            view_count: media.view_count ?? engagement.view_count,
+            duration_seconds: media.duration_seconds ?? engagement.duration_seconds,
+          };
+          mediaTitle = media.title ?? null;
+          for (const u of media.video_urls ?? []) {
+            if (u && !videoUrls.includes(u)) videoUrls.push(u);
+          }
+          for (const u of media.thumbnail_urls ?? []) {
+            if (u && !thumbUrls.includes(u)) thumbUrls.push(u);
+          }
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const title = oembed?.title ?? mediaTitle ?? null;
     const creator = oembed?.author_name ?? null;
     const creatorUrl = oembed?.author_url ?? null;
     const thumbnail = oembed?.thumbnail_url ?? thumbUrls[0] ?? null;

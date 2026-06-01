@@ -146,12 +146,32 @@ def fetch_instagram_json_ld(url: str) -> RawMetadata | None:
     creator = author.get("name") if isinstance(author, dict) else None
     creator_url = author.get("url") if isinstance(author, dict) else None
 
+    likes: int | None = None
+    comments: int | None = None
+    for stat in data.get("interactionStatistic") or []:
+        if not isinstance(stat, dict):
+            continue
+        itype = str(stat.get("interactionType") or "")
+        count = stat.get("userInteractionCount")
+        if count is None:
+            continue
+        try:
+            n = int(count)
+        except (TypeError, ValueError):
+            continue
+        if "LikeAction" in itype:
+            likes = n
+        elif "CommentAction" in itype:
+            comments = n
+
     return RawMetadata(
         platform=Platform.instagram,
         title=(data.get("caption") or data.get("description") or "Instagram Reel")[:200],
         creator=creator or "Unknown creator",
         creator_url=creator_url,
         thumbnail=data.get("thumbnailUrl"),
+        likes=likes,
+        comments=comments,
     )
 
 

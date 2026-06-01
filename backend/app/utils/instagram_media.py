@@ -9,6 +9,7 @@ import httpx
 
 from app.core.logging import get_logger
 from app.utils.cookie_utils import cookie_header_for_url
+from app.utils.instagram_media_api import fetch_instagram_media_info
 from app.utils.instagram_page_media import extract_instagram_media_urls
 from app.utils.ytdlp import base_ytdlp_opts
 
@@ -85,6 +86,13 @@ def _collect_media_urls(
         thumb_urls.extend(str(u) for u in ig_media.get("ig_thumbnail_urls") or [] if u)
         if ig_media.get("thumbnail_url"):
             thumb_urls.append(str(ig_media["thumbnail_url"]))
+
+    if not video_urls:
+        media_info = fetch_instagram_media_info(url)
+        if media_info:
+            for u in media_info.get("video_urls") or []:
+                if u not in video_urls:
+                    video_urls.append(str(u))
 
     scraped = extract_instagram_media_urls(url)
     for u in scraped.get("video_urls") or []:

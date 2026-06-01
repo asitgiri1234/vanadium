@@ -245,9 +245,15 @@ INSTAGRAM_COOKIES_FILE=/etc/secrets/instagram_cookies.txt
 
 6. **Save Changes** → Render redeploys automatically.
 
-**Option B — Mount via shell (one-off test)**
+**Vercel (optional but recommended for IG likes/comments on production)**
 
-Not recommended for long-term; Secret Files are easier to rotate.
+Add the same session as a single header string so `/api/instagram/media` can authenticate from Vercel’s IP:
+
+```env
+INSTAGRAM_COOKIE=sessionid=YOUR_SESSION_ID; csrftoken=YOUR_CSRF_TOKEN
+```
+
+Vercel → Project → Settings → Environment Variables → add for **Production**, then redeploy the frontend.
 
 ### Step 6 — Verify
 
@@ -295,7 +301,10 @@ Runtime is not Docker. Delete the service, recreate with **Runtime → Docker**.
 Set `INSTAGRAM_COOKIES_FILE` (see [Instagram session cookies](#instagram-session-cookies-cookiestxt)). Ensure `ENABLE_WHISPER=true` and `GROQ_API_KEY` is set for reel audio → Groq Whisper.
 
 **YouTube transcript empty on production**  
-Captions are fetched via Vercel proxy first; if that fails, Groq Whisper transcribes downloaded audio. Confirm `ENABLE_WHISPER=true`, `WHISPER_PROVIDER=groq`, and redeploy **both** Vercel and Render.
+Captions use **Innertube** (`youtubei.googleapis.com`) on Render, then Vercel proxy, then **Groq Whisper** on Innertube audio if still empty. Confirm `ENABLE_WHISPER=true`, `WHISPER_PROVIDER=groq`, `GROQ_API_KEY` set, and redeploy **both** Vercel and Render (health should show `0.3.5+`).
+
+**Instagram likes/comments still N/A**  
+Set `INSTAGRAM_COOKIES_FILE` on Render **and** `INSTAGRAM_COOKIE` on Vercel (see cookies section). Re-run Analyze after deploy — old analyses keep stale metadata.
 
 **Empty RAG answers**  
 Add `OPENAI_API_KEY` for real embeddings; Groq-only uses hash fallback.
