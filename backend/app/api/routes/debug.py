@@ -5,6 +5,7 @@ from __future__ import annotations
 import httpx
 from fastapi import APIRouter, Query
 
+from app.core.config import settings
 from app.services.metadata_service import metadata_service
 from app.utils.cookie_utils import cookies_configured
 from app.utils.instagram_embed import fetch_instagram_fallback_metadata
@@ -12,6 +13,7 @@ from app.utils.instagram_media_api import fetch_instagram_media_info
 from app.utils.instagram_page_media import extract_instagram_media_urls
 from app.utils.url_utils import extract_youtube_id
 from app.utils.youtube_captions import fetch_youtube_transcript_raw
+from app.utils.youtube_serpapi import fetch_youtube_transcript_serpapi
 from app.utils.youtube_cloud import is_youtube_cloud_host
 from app.utils.youtube_html import fetch_youtube_html_metrics
 from app.utils.youtube_innertube import fetch_youtube_innertube_metadata
@@ -90,6 +92,9 @@ async def debug_youtube_metadata(url: str = Query(..., description="YouTube watc
     socialcounts = _fetch_socialcounts(video_id) if video_id else None
     social = fetch_youtube_social_metadata(url)
     transcript = fetch_youtube_transcript_raw(url)
+    serp_segments = (
+        len(fetch_youtube_transcript_serpapi(video_id)) if video_id else 0
+    )
     merged = metadata_service.fetch(url)
 
     return {
@@ -124,6 +129,8 @@ async def debug_youtube_metadata(url: str = Query(..., description="YouTube watc
             "comments": social.comments if social else None,
         },
         "transcript_segments": len(transcript),
+        "serpapi_transcript_segments": serp_segments,
+        "serpapi_configured": bool(settings.serp_api_key.strip()),
         "raw_probes": {
             "innertube_googleapis": _raw_innertube_probe(video_id) if video_id else {},
             "socialcounts": _raw_socialcounts_probe(video_id) if video_id else {},

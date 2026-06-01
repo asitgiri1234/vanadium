@@ -14,6 +14,7 @@ from app.core.logging import get_logger
 from app.utils.url_utils import extract_youtube_id
 from app.utils.youtube_cloud import is_youtube_cloud_host
 from app.utils.youtube_proxy import fetch_frontend_proxy
+from app.utils.youtube_serpapi import fetch_youtube_transcript_serpapi
 
 logger = get_logger(__name__)
 
@@ -368,7 +369,12 @@ def fetch_youtube_transcript_raw(url: str) -> list[dict]:
 
     cloud = is_youtube_cloud_host()
 
-    # Innertube via googleapis.com is the most reliable path on Render (datacenter IP).
+    if settings.serp_api_key.strip():
+        segments = fetch_youtube_transcript_serpapi(video_id)
+        if segments:
+            return segments
+
+    # Innertube via googleapis.com is the most reliable free path on Render.
     segments = _fetch_from_innertube(video_id)
     if segments:
         return segments

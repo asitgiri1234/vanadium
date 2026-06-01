@@ -87,6 +87,9 @@ class Settings(BaseSettings):
     # Optional Supadata key — cloud transcript fallback when YouTube blocks captions.
     supadata_api_key: str = Field(default="", alias="SUPADATA_API_KEY")
 
+    # SerpApi — reliable YouTube transcripts from datacenter IPs (serpapi.com).
+    serp_api_key: str = Field(default="", alias="SERP_API_KEY")
+
     # Vercel frontend URL for YouTube proxy routes when datacenter APIs return 403.
     frontend_proxy_url: str = Field(default="", alias="FRONTEND_PROXY_URL")
 

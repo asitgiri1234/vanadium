@@ -53,5 +53,7 @@ services:
         sync: false
       - key: SUPADATA_API_KEY
         sync: false
+      - key: SERP_API_KEY
+        sync: false
       - key: FRONTEND_PROXY_URL
         value: https://vanadium-delta.vercel.app

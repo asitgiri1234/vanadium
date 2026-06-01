@@ -301,7 +301,7 @@ Runtime is not Docker. Delete the service, recreate with **Runtime → Docker**.
 Set `INSTAGRAM_COOKIES_FILE` (see [Instagram session cookies](#instagram-session-cookies-cookiestxt)). Ensure `ENABLE_WHISPER=true` and `GROQ_API_KEY` is set for reel audio → Groq Whisper.
 
 **YouTube transcript empty on production**  
-Captions use **Innertube** (`youtubei.googleapis.com`) on Render, then Vercel proxy, then **Groq Whisper** on Innertube audio if still empty. Confirm `ENABLE_WHISPER=true`, `WHISPER_PROVIDER=groq`, `GROQ_API_KEY` set, and redeploy **both** Vercel and Render (health should show `0.3.5+`).
+Set `SERP_API_KEY` (SerpApi [YouTube Video Transcript](https://serpapi.com/youtube-video-transcript)) — tried first on Render. Fallbacks: Innertube captions, Vercel proxy, Groq Whisper. Confirm `ENABLE_WHISPER=true` and redeploy Render after adding the key.
 
 **Instagram likes/comments still N/A**  
 Set `INSTAGRAM_COOKIES_FILE` on Render **and** `INSTAGRAM_COOKIE` on Vercel (see cookies section). Re-run Analyze after deploy — old analyses keep stale metadata.
