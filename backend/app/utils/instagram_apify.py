@@ -1,4 +1,4 @@
-"""Instagram transcripts + metrics via Apify crawlerbros/instagram-transcript-scraper."""
+"""Instagram data via Apify apify/instagram-scraper (sync dataset run)."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ from app.models.schemas import Platform
 
 logger = get_logger(__name__)
 
-# Developer actor — slash → tilde in REST URLs.
-ACTOR_ID = "crawlerbros~instagram-transcript-scraper"
+# Official actor — REST URL uses tilde instead of slash.
+ACTOR_ID = "apify~instagram-scraper"
 APIFY_RUN_SYNC_DATASET = (
     f"https://api.apify.com/v2/acts/{ACTOR_ID}/run-sync-get-dataset-items"
 )
@@ -27,56 +27,82 @@ _dataset_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
 @dataclass
 class InstagramApifyResult:
-    """Parsed crawlerbros transcript-scraper dataset."""
+    """Parsed apify/instagram-scraper dataset for one reel/post URL."""
 
     post: dict[str, Any] | None = None
     comments: list[dict[str, Any]] = field(default_factory=list)
     dataset_items: list[dict[str, Any]] = field(default_factory=list)
-    full_text: str = ""
 
 
-def _build_input(reel_url: str) -> dict[str, Any]:
-    """Force Whisper audio transcription on the crawlerbros actor."""
+def _build_input(
+    reel_url: str,
+    *,
+    results_type: str = "posts",
+    results_limit: int = 1,
+) -> dict[str, Any]:
     return {
-        "videoUrls": [reel_url.strip()],
-        "transcriptionMethod": "whisper",
-        "whisperModel": "base",
-        "language": "en",
+        "directUrls": [reel_url.strip()],
+        "resultsType": results_type,
+        "resultsLimit": results_limit,
     }
 
 
-def _run_sync_dataset(reel_url: str) -> list[dict[str, Any]]:
+def _run_sync_dataset(
+    reel_url: str,
+    *,
+    results_type: str = "posts",
+    results_limit: int = 1,
+) -> list[dict[str, Any]]:
     """POST run-sync-get-dataset-items; token from APIFY_API_KEY env only."""
     api_key = settings.apify_api_key.strip()
     if not api_key:
         return []
+
+    body = _build_input(
+        reel_url,
+        results_type=results_type,
+        results_limit=results_limit,
+    )
 
     try:
         with httpx.Client(timeout=300.0) as client:
             resp = client.post(
                 APIFY_RUN_SYNC_DATASET,
                 params={"token": api_key},
-                json=_build_input(reel_url),
+                json=body,
             )
             if resp.status_code not in (200, 201):
                 logger.warning(
-                    "Apify %s HTTP %s for %s: %s",
+                    "Apify %s HTTP %s (%s) for %s: %s",
                     ACTOR_ID,
                     resp.status_code,
+                    results_type,
                     reel_url,
                     resp.text[:400],
                 )
                 return []
             data = resp.json()
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Apify %s failed for %s: %s", ACTOR_ID, reel_url, exc)
+        logger.warning(
+            "Apify %s failed (%s) for %s: %s",
+            ACTOR_ID,
+            results_type,
+            reel_url,
+            exc,
+        )
         return []
 
     if not isinstance(data, list):
         logger.warning("Apify %s unexpected payload for %s", ACTOR_ID, reel_url)
         return []
 
-    logger.info("Apify %s ok: %d dataset items for %s", ACTOR_ID, len(data), reel_url)
+    logger.info(
+        "Apify %s ok (%s): %d dataset items for %s",
+        ACTOR_ID,
+        results_type,
+        len(data),
+        reel_url,
+    )
     return data
 
 
@@ -91,107 +117,81 @@ def _get_cached_dataset(url: str) -> list[dict[str, Any]]:
     if cached and now - cached[0] < _CACHE_TTL_SEC:
         return cached[1]
 
-    items = _run_sync_dataset(url)
-    _dataset_cache[key] = (now, items)
-    return items
+    posts = _run_sync_dataset(url, results_type="posts", results_limit=1)
+    comments = _run_sync_dataset(url, results_type="comments", results_limit=50)
+    combined = posts + [
+        c for c in comments if isinstance(c, dict) and c not in posts
+    ]
+    _dataset_cache[key] = (now, combined)
+    return combined
 
 
-def _parse_transcript_segments(items: list[Any]) -> list[dict]:
-    """Build segments from segmentText rows, else a single block from fullText (not title/caption)."""
-    timed: list[dict] = []
-    full_text_parts: list[str] = []
-
-    for raw in items:
-        if not isinstance(raw, dict):
-            continue
-        if raw.get("errMsg"):
-            logger.warning("Apify segment error: %s", raw.get("errMsg"))
-            continue
-
-        seg_text = (raw.get("segmentText") or "").strip()
-        if seg_text:
-            try:
-                start = float(raw.get("segmentStart") or 0.0)
-            except (TypeError, ValueError):
-                start = 0.0
-            try:
-                end = float(raw.get("segmentEnd") or start)
-            except (TypeError, ValueError):
-                end = start
-            timed.append(
-                {
-                    "text": seg_text,
-                    "start": start,
-                    "duration": max(0.0, end - start),
-                }
-            )
-
-        spoken = (raw.get("fullText") or "").strip()
-        if spoken and spoken not in full_text_parts:
-            full_text_parts.append(spoken)
-
-    if timed:
-        timed.sort(key=lambda s: s["start"])
-        return timed
-
-    if full_text_parts:
-        # Prefer longest fullText (duplicate on each segment row).
-        full = max(full_text_parts, key=len)
-        return [{"text": full, "start": 0.0, "duration": 0.0}]
-
-    return []
+def _is_comment_row(item: dict[str, Any]) -> bool:
+    return bool(item.get("postId")) and bool(item.get("text"))
 
 
-def parse_instagram_transcript_dataset(items: list[Any]) -> InstagramApifyResult:
-    """Parse post metrics and fullText from crawlerbros dataset rows."""
+def _is_post_row(item: dict[str, Any]) -> bool:
+    if _is_comment_row(item):
+        return False
+    return (
+        item.get("type") in ("Video", "Image", "Sidecar", "Reel", "GraphVideo")
+        or item.get("likesCount") is not None
+        or item.get("shortCode")
+    )
+
+
+def parse_instagram_scraper_dataset(items: list[Any]) -> InstagramApifyResult:
+    """Split dataset into post metrics and comment rows."""
     result = InstagramApifyResult(dataset_items=[])
-    full_text_candidates: list[str] = []
 
     for raw in items:
         if not isinstance(raw, dict):
             continue
         result.dataset_items.append(raw)
 
-        spoken = (raw.get("fullText") or "").strip()
-        if spoken and spoken not in full_text_candidates:
-            full_text_candidates.append(spoken)
+        if _is_comment_row(raw):
+            result.comments.append(raw)
+            continue
 
-        if result.post is None and (
-            raw.get("likeCount") is not None
-            or raw.get("videoUrl")
-            or raw.get("url")
-        ):
+        if _is_post_row(raw) and result.post is None:
             result.post = raw
-
-    if full_text_candidates:
-        result.full_text = max(full_text_candidates, key=len)
+            embedded = raw.get("latestComments") or []
+            if isinstance(embedded, list):
+                for comment in embedded:
+                    if isinstance(comment, dict) and comment not in result.comments:
+                        result.comments.append(comment)
 
     return result
 
 
 def fetch_instagram_apify(url: str) -> InstagramApifyResult:
-    """Run crawlerbros/instagram-transcript-scraper and parse the dataset."""
+    """Run apify/instagram-scraper (posts + comments) and parse the dataset."""
     if not settings.apify_api_key.strip():
         return InstagramApifyResult()
-    return parse_instagram_transcript_dataset(_get_cached_dataset(url))
+    items = _get_cached_dataset(url)
+    return parse_instagram_scraper_dataset(items)
 
 
 def apify_result_to_raw(url: str, parsed: InstagramApifyResult) -> RawMetadata | None:
-    """Map scraper row to RawMetadata (metrics only — not title/caption for transcript)."""
+    """Map scraper post row to RawMetadata (likes, comments count, views, etc.)."""
     post = parsed.post
     if not post:
         return None
 
-    # Post title for UI: IG caption in `title` field from actor (not used as transcript).
-    display_title = (post.get("title") or "").strip()
-    owner = post.get("userName") or post.get("userFullName") or "Unknown creator"
+    caption = (post.get("caption") or post.get("title") or "").strip()
+    owner = post.get("ownerUsername") or post.get("username") or "Unknown creator"
     handle = str(owner).lstrip("@")
 
-    likes = post.get("likeCount")
-    comments_count = post.get("commentCount")
-    views = post.get("play_count") or post.get("videoViewCount") or 0
+    likes = post.get("likesCount")
+    comments_count = post.get("commentCount") or post.get("commentsCount")
+    views = (
+        post.get("videoViewCount")
+        or post.get("videoPlayCount")
+        or post.get("playCount")
+        or 0
+    )
 
-    duration = post.get("video_duration") or post.get("videoDuration")
+    duration = post.get("videoDuration")
     duration_seconds = 0
     if duration is not None:
         try:
@@ -199,12 +199,12 @@ def apify_result_to_raw(url: str, parsed: InstagramApifyResult) -> RawMetadata |
         except (TypeError, ValueError):
             duration_seconds = 0
 
-    video_url = post.get("videoUrl")
-    thumb = post.get("img") or post.get("thumbnail_url")
+    video_url = post.get("videoUrl") or post.get("video_url")
+    thumb = post.get("displayUrl") or post.get("thumbnailUrl")
 
     return RawMetadata(
         platform=Platform.instagram,
-        title=display_title[:300] if display_title else "Instagram Reel",
+        title=caption[:300] if caption else "Instagram Reel",
         creator=handle or str(owner),
         creator_url=f"https://www.instagram.com/{handle}/" if handle else None,
         thumbnail=str(thumb) if thumb else None,
@@ -212,10 +212,10 @@ def apify_result_to_raw(url: str, parsed: InstagramApifyResult) -> RawMetadata |
         likes=int(likes) if likes is not None else None,
         comments=int(comments_count) if comments_count is not None else None,
         duration_seconds=duration_seconds,
-        description=display_title,
+        description=caption,
         raw={
             "apify_post": post,
-            "apify_full_text": parsed.full_text,
+            "apify_comments": parsed.comments,
             "ig_video_urls": [video_url] if video_url else [],
             "thumbnail_url": thumb,
         },
@@ -223,29 +223,35 @@ def apify_result_to_raw(url: str, parsed: InstagramApifyResult) -> RawMetadata |
 
 
 def fetch_instagram_apify_metadata(url: str) -> RawMetadata | None:
-    """Likes, comments, views from crawlerbros transcript-scraper metadata fields."""
+    """Post metrics + embedded comments from apify/instagram-scraper."""
     parsed = fetch_instagram_apify(url)
     meta = apify_result_to_raw(url, parsed)
     if meta:
         logger.info(
-            "Instagram metadata from Apify (%s): likes=%s comments=%s views=%s",
-            ACTOR_ID,
+            "Instagram metadata from Apify: likes=%s comments=%s views=%s (%d comment rows)",
             meta.likes,
             meta.comments,
             meta.views,
+            len(parsed.comments),
         )
     return meta
 
 
 def fetch_instagram_transcript_apify(reel_url: str) -> list[dict]:
-    """Spoken transcript from fullText / segmentText (never title or caption)."""
-    items = _get_cached_dataset(reel_url)
-    segments = _parse_transcript_segments(items)
-    if segments:
-        logger.info(
-            "Instagram transcript from Apify (%s): %d segments for %s",
-            ACTOR_ID,
-            len(segments),
-            reel_url,
-        )
-    return segments
+    """Transcript segments — caption text from scraper (no timed captions on this actor)."""
+    parsed = fetch_instagram_apify(reel_url)
+    post = parsed.post
+    if not post:
+        return []
+
+    caption = (post.get("caption") or "").strip()
+    if not caption:
+        return []
+
+    logger.info(
+        "Instagram caption transcript from Apify (%s): %d chars for %s",
+        ACTOR_ID,
+        len(caption),
+        reel_url,
+    )
+    return [{"text": caption, "start": 0.0, "duration": 0.0}]

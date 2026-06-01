@@ -307,7 +307,7 @@ Set `SERP_API_KEY` (SerpApi [YouTube Video Transcript](https://serpapi.com/youtu
 Set `INSTAGRAM_COOKIES_FILE` on Render **and** `INSTAGRAM_COOKIE` on Vercel (see cookies section). Re-run Analyze after deploy — old analyses keep stale metadata.
 
 **Instagram transcript empty**  
-Set `APIFY_API_KEY` on Render. Uses **`crawlerbros/instagram-transcript-scraper`** with `transcriptionMethod: whisper`. Transcripts read from **`fullText`** / `segmentText` (not caption). Groq Whisper remains the local fallback if Apify returns empty.
+Set `APIFY_API_KEY` on Render (Apify → Settings → Integrations). Uses **`apify/instagram-scraper`** with `directUrls` for post metrics and comments. Caption is used as transcript text; Groq Whisper remains the fallback when caption is empty.
 
 **Empty RAG answers**  
 Add `OPENAI_API_KEY` for real embeddings; Groq-only uses hash fallback.

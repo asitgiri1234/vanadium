@@ -160,12 +160,11 @@ async def debug_instagram_metadata(url: str = Query(..., description="Instagram 
         "cookies_configured": cookies_configured(),
         "apify": {
             "configured": bool(settings.apify_api_key.strip()),
-            "actor": "crawlerbros~instagram-transcript-scraper",
+            "actor": "apify~instagram-scraper",
             "post_found": apify.post is not None,
-            "likes": (apify.post or {}).get("likeCount"),
-            "comments_count": (apify.post or {}).get("commentCount"),
-            "views": (apify.post or {}).get("play_count"),
-            "full_text_chars": len(apify.full_text),
+            "likes": (apify.post or {}).get("likesCount"),
+            "comments_count": (apify.post or {}).get("commentsCount"),
+            "views": (apify.post or {}).get("videoViewCount"),
             "comment_rows": len(apify.comments),
         },
         "apify_merged": {
