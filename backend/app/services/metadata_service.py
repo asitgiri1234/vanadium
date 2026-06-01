@@ -16,10 +16,11 @@ from app.core.logging import get_logger
 from app.models.raw_metadata import RawMetadata
 from app.models.schemas import Platform
 from app.utils.text import extract_hashtags
-from app.utils.url_utils import detect_platform
+from app.utils.url_utils import detect_platform, extract_youtube_id
 from app.utils.youtube_cloud import is_youtube_cloud_host
 from app.utils.youtube_html import fetch_youtube_html_metrics
 from app.utils.youtube_innertube import fetch_youtube_innertube_metadata
+from app.utils.youtube_proxy import fetch_frontend_proxy
 from app.utils.youtube_social import fetch_youtube_social_metadata
 from app.utils.youtube_web import YouTubeWebMetadata, fetch_youtube_web_metadata
 from app.utils.ytdlp import base_ytdlp_opts
@@ -143,6 +144,7 @@ class MetadataService:
         """YouTube: layered fallbacks for cloud hosts where youtube.com is blocked."""
         result = RawMetadata(platform=Platform.youtube)
         cloud = is_youtube_cloud_host()
+        video_id = extract_youtube_id(url)
 
         from app.utils.youtube_api import fetch_youtube_api_metadata
 
@@ -183,6 +185,20 @@ class MetadataService:
             if social:
                 logger.info("YouTube metadata enriched via social APIs for %s", url)
                 result = _merge_metadata(result, social)
+
+        if cloud and result.duration_seconds == 0 and video_id:
+            scrape = fetch_frontend_proxy("scrape", video_id)
+            if scrape and scrape.get("ok"):
+                metrics = scrape.get("metrics") or {}
+                patch = RawMetadata(
+                    platform=Platform.youtube,
+                    views=int(metrics.get("viewCount") or 0),
+                    likes=int(metrics["likeCount"]) if metrics.get("likeCount") is not None else None,
+                    comments=int(metrics["commentCount"]) if metrics.get("commentCount") is not None else None,
+                    duration_seconds=int(metrics.get("lengthSeconds") or 0),
+                )
+                logger.info("YouTube metadata enriched via frontend scrape for %s", url)
+                result = _merge_metadata(result, patch)
 
         if _metadata_is_empty(result):
             oembed = self._fetch_youtube_oembed(url)
