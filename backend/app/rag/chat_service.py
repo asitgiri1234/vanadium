@@ -19,6 +19,7 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.schemas import AnalysisSnapshot, Citation, TranscriptSegment
 from app.rag.citations import select_cited
+from app.rag.off_topic import OFF_TOPIC_REPLY, is_off_topic_message
 from app.rag.prompts import SYSTEM_PROMPT, build_context, build_user_prompt
 from app.rag.retriever import retriever
 from app.services.embedding_service import embedding_service
@@ -39,6 +40,16 @@ class ChatService:
         snapshot = analysis_store.get(analysis_id)
         if snapshot is None:
             yield {"type": "error", "detail": f"Unknown analysis_id: {analysis_id}"}
+            return
+
+        if is_off_topic_message(message):
+            answer = OFF_TOPIC_REPLY
+            async for token in self._yield_words(answer):
+                yield {"type": "token", "text": token}
+            analysis_store.append_turn(analysis_id, "user", message)
+            analysis_store.append_turn(analysis_id, "assistant", answer)
+            yield {"type": "citations", "data": []}
+            yield {"type": "done", "message_id": "m_" + uuid.uuid4().hex[:8]}
             return
 
         answer_parts: list[str] = []
@@ -68,16 +79,31 @@ class ChatService:
                     answer_parts.append(token)
                     yield {"type": "token", "text": token}
         except Exception as exc:  # noqa: BLE001
-            logger.exception("Generation failed")
-            yield {"type": "error", "detail": f"Generation failed: {exc}"}
+            logger.exception("Generation failed for analysis %s", analysis_id)
+            fallback = (
+                "I hit a snag answering that — your analysis is still loaded. "
+                "Please ask again about Video A vs Video B (hooks, pacing, engagement, etc.)."
+            )
+            async for token in self._yield_words(fallback):
+                yield {"type": "token", "text": token}
+            analysis_store.append_turn(analysis_id, "user", message)
+            analysis_store.append_turn(analysis_id, "assistant", fallback)
+            yield {"type": "citations", "data": []}
+            yield {"type": "done", "message_id": "m_" + uuid.uuid4().hex[:8]}
             return
 
         answer = "".join(answer_parts).strip()
         if settings.llm_configured and not answer:
-            yield {
-                "type": "error",
-                "detail": "LLM returned an empty response. Try again.",
-            }
+            fallback = (
+                "I couldn't generate an answer for that — try rephrasing your question "
+                "about Video A vs Video B (e.g. hooks, CTAs, or engagement)."
+            )
+            async for token in self._yield_words(fallback):
+                yield {"type": "token", "text": token}
+            analysis_store.append_turn(analysis_id, "user", message)
+            analysis_store.append_turn(analysis_id, "assistant", fallback)
+            yield {"type": "citations", "data": []}
+            yield {"type": "done", "message_id": "m_" + uuid.uuid4().hex[:8]}
             return
 
         cited = select_cited(answer, citations)

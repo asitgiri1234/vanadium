@@ -58,11 +58,18 @@ class AnalysisStore:
 
     def get(self, analysis_id: str) -> AnalysisSnapshot | None:
         with self._lock:
-            return self._snapshots.get(analysis_id)
+            snap = self._snapshots.get(analysis_id)
+            if snap is not None:
+                return snap
+            if self._load_file(self._path(analysis_id)):
+                return self._snapshots.get(analysis_id)
+            return None
 
     def exists(self, analysis_id: str) -> bool:
         with self._lock:
-            return analysis_id in self._snapshots
+            if analysis_id in self._snapshots:
+                return True
+            return self._path(analysis_id).is_file()
 
     # --- transcripts --- #
     def save_transcripts(
@@ -76,6 +83,9 @@ class AnalysisStore:
     ) -> dict[VideoSlot, list[TranscriptSegment]] | None:
         with self._lock:
             stored = self._transcripts.get(analysis_id)
+            if stored is None and self._path(analysis_id).is_file():
+                self._load_file(self._path(analysis_id))
+                stored = self._transcripts.get(analysis_id)
             return {k: list(v) for k, v in stored.items()} if stored else None
 
     # --- visuals --- #
@@ -88,15 +98,22 @@ class AnalysisStore:
     def get_visuals(self, analysis_id: str) -> dict[VideoSlot, VideoVisual] | None:
         with self._lock:
             stored = self._visuals.get(analysis_id)
+            if stored is None and self._path(analysis_id).is_file():
+                self._load_file(self._path(analysis_id))
+                stored = self._visuals.get(analysis_id)
             return dict(stored) if stored else None
 
     # --- conversation memory --- #
     def get_memory(self, analysis_id: str) -> list[ChatTurn]:
         with self._lock:
+            if analysis_id not in self._memory and self._path(analysis_id).is_file():
+                self._load_file(self._path(analysis_id))
             return list(self._memory.get(analysis_id, []))
 
     def append_turn(self, analysis_id: str, role: str, content: str) -> None:
         with self._lock:
+            if analysis_id not in self._snapshots and self._path(analysis_id).is_file():
+                self._load_file(self._path(analysis_id))
             turns = self._memory.setdefault(analysis_id, [])
             turns.append(ChatTurn(role=role, content=content))  # type: ignore[arg-type]
             limit = self._max_turns * 2
