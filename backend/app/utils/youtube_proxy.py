@@ -33,7 +33,7 @@ def fetch_frontend_proxy(path: str, video_id: str) -> dict[str, Any] | None:
 
     url = f"{base}/api/youtube/{path}"
     try:
-        with httpx.Client(timeout=45.0, follow_redirects=True) as client:
+        with httpx.Client(timeout=90.0, follow_redirects=True) as client:
             resp = client.get(url, params={"videoId": video_id})
             resp.raise_for_status()
             payload = resp.json()

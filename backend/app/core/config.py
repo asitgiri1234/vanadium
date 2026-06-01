@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     groq_whisper_model: str = Field(
         default="whisper-large-v3-turbo", alias="GROQ_WHISPER_MODEL"
     )
+    whisper_max_audio_seconds: int = Field(
+        default=900, alias="WHISPER_MAX_AUDIO_SECONDS"
+    )
     enable_whisper: bool = Field(default=False, alias="ENABLE_WHISPER")
 
     # Instagram authentication for yt-dlp (unlocks views/play counts + private

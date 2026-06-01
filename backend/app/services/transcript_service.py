@@ -88,20 +88,26 @@ class TranscriptService:
         if not audio_path:
             return []
 
+        original = audio_path
+        trimmed = self._trim_audio_for_whisper(original)
+        path_for_whisper = trimmed or original
+
         try:
             if backend == "groq":
-                segments = self._transcribe_groq(audio_path)
+                segments = self._transcribe_groq(path_for_whisper)
             else:
-                segments = self._transcribe_whisper_local(audio_path)
+                segments = self._transcribe_whisper_local(path_for_whisper)
             return [
                 {"text": s.text, "start": s.start, "duration": s.duration}
                 for s in segments
             ]
         finally:
-            try:
-                os.remove(audio_path)
-            except OSError:
-                pass
+            for path in {original, trimmed}:
+                if path:
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
 
     @staticmethod
     def _download_youtube_audio(url: str) -> str | None:
@@ -185,15 +191,22 @@ class TranscriptService:
         audio_path = self._download_audio(url)
         if not audio_path:
             return []
+
+        original = audio_path
+        trimmed = self._trim_audio_for_whisper(original)
+        path_for_whisper = trimmed or original
+
         try:
             if backend == "groq":
-                return self._transcribe_groq(audio_path)
-            return self._transcribe_whisper_local(audio_path)
+                return self._transcribe_groq(path_for_whisper)
+            return self._transcribe_whisper_local(path_for_whisper)
         finally:
-            try:
-                os.remove(audio_path)
-            except OSError:
-                pass
+            for path in {original, trimmed}:
+                if path:
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
 
     @staticmethod
     def _download_audio(url: str) -> str | None:
@@ -216,6 +229,50 @@ class TranscriptService:
         direct_path = os.path.join(tmp_dir, "audio.m4a")
         if download_instagram_audio(url, direct_path):
             return direct_path
+        return None
+
+    @staticmethod
+    def _trim_audio_for_whisper(audio_path: str) -> str | None:
+        """Trim long audio so Groq Whisper + ingest finish within Render timeouts."""
+        max_sec = max(60, settings.whisper_max_audio_seconds)
+        out_path = audio_path.rsplit(".", 1)[0] + "_trim.m4a"
+        try:
+            import subprocess
+
+            probe = subprocess.run(
+                [
+                    "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1", audio_path,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            duration = float(probe.stdout.strip() or 0)
+            if duration <= max_sec:
+                return None
+
+            subprocess.run(
+                [
+                    "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                    "-i", audio_path,
+                    "-t", str(max_sec),
+                    "-ac", "1",
+                    "-ar", "16000",
+                    out_path,
+                ],
+                check=True,
+                timeout=120,
+            )
+            if os.path.exists(out_path) and os.path.getsize(out_path) > 1000:
+                logger.info(
+                    "Trimmed audio for Whisper: %.0fs → %ds cap",
+                    duration,
+                    max_sec,
+                )
+                return out_path
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Audio trim for Whisper failed: %s", exc)
         return None
 
     def _transcribe_groq(self, audio_path: str) -> list[TranscriptSegment]:

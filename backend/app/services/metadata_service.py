@@ -15,6 +15,7 @@ import httpx
 from app.core.logging import get_logger
 from app.models.raw_metadata import RawMetadata
 from app.models.schemas import Platform
+from app.utils.instagram_embed import fetch_instagram_fallback_metadata
 from app.utils.instagram_profile import fetch_instagram_profile_metadata, _extract_handle
 from app.utils.instagram_proxy import fetch_instagram_profile_proxy
 from app.utils.metadata_display import coalesce_count, followers_known
@@ -270,11 +271,17 @@ class MetadataService:
         )
 
     def _fetch_instagram(self, url: str) -> RawMetadata:
+        result = RawMetadata(platform=Platform.instagram)
         try:
-            result = self._fetch_with_ytdlp(url, Platform.instagram)
+            ytdlp = self._fetch_with_ytdlp(url, Platform.instagram)
+            result = _merge_metadata(result, ytdlp)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Instagram metadata extraction failed for %s: %s", url, exc)
-            return RawMetadata(platform=Platform.instagram)
+            logger.warning("Instagram yt-dlp failed for %s: %s", url, exc)
+
+        if result.title == "Unknown title" or not result.thumbnail:
+            fallback = fetch_instagram_fallback_metadata(url)
+            if fallback:
+                result = _merge_metadata(result, fallback)
 
         if not followers_known(result.follower_count):
             raw_info = result.raw if isinstance(result.raw, dict) else None
