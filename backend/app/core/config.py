@@ -84,6 +84,9 @@ class Settings(BaseSettings):
     # Optional Supadata key — cloud transcript fallback when YouTube blocks captions.
     supadata_api_key: str = Field(default="", alias="SUPADATA_API_KEY")
 
+    # Vercel frontend URL for YouTube proxy routes when datacenter APIs return 403.
+    frontend_proxy_url: str = Field(default="", alias="FRONTEND_PROXY_URL")
+
     # Visual understanding (vision LLM reads scene + on-screen text from frames).
     enable_visual: bool = Field(default=False, alias="ENABLE_VISUAL")
     enable_ocr: bool = Field(default=False, alias="ENABLE_OCR")

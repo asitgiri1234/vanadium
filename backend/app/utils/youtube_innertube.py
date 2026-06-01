@@ -12,6 +12,8 @@ from app.core.logging import get_logger
 from app.models.raw_metadata import RawMetadata
 from app.models.schemas import Platform
 from app.utils.url_utils import extract_youtube_id
+from app.utils.youtube_cloud import is_youtube_cloud_host
+from app.utils.youtube_proxy import fetch_frontend_proxy
 
 logger = get_logger(__name__)
 
@@ -169,7 +171,7 @@ def fetch_youtube_innertube_metadata(url: str) -> RawMetadata | None:
                 continue
 
             parsed = _parse_innertube_response(data, video_id)
-            if parsed:
+            if parsed and (parsed.views or parsed.duration_seconds or parsed.comments is not None):
                 logger.info(
                     "YouTube innertube (%s via %s): views=%s duration=%s for %s",
                     client.get("clientName"),
@@ -179,6 +181,21 @@ def fetch_youtube_innertube_metadata(url: str) -> RawMetadata | None:
                     video_id,
                 )
                 return parsed
+
+    if is_youtube_cloud_host():
+        proxy = fetch_frontend_proxy("innertube", video_id)
+        if proxy and int(proxy.get("status") or 0) == 200:
+            proxy_data = proxy.get("data")
+            if isinstance(proxy_data, dict):
+                parsed = _parse_innertube_response(proxy_data, video_id)
+                if parsed:
+                    logger.info(
+                        "YouTube innertube via frontend proxy: views=%s duration=%s for %s",
+                        parsed.views,
+                        parsed.duration_seconds,
+                        video_id,
+                    )
+                    return parsed
 
     logger.warning("YouTube innertube: all clients/endpoints failed for %s", video_id)
     return None

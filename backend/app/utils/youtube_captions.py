@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.utils.url_utils import extract_youtube_id
 from app.utils.youtube_cloud import is_youtube_cloud_host
+from app.utils.youtube_proxy import fetch_frontend_proxy
 
 logger = get_logger(__name__)
 
@@ -291,5 +292,10 @@ def fetch_youtube_transcript_raw(url: str) -> list[dict]:
             "(set SUPADATA_API_KEY for reliable captions)",
             video_id,
         )
+        proxy = fetch_frontend_proxy("transcript", video_id)
+        if proxy:
+            segments = proxy.get("segments") or []
+            if isinstance(segments, list) and segments:
+                return [s for s in segments if isinstance(s, dict)]
 
     return []

@@ -8,6 +8,8 @@ from app.core.logging import get_logger
 from app.models.raw_metadata import RawMetadata
 from app.models.schemas import Platform
 from app.utils.url_utils import extract_youtube_id
+from app.utils.youtube_cloud import is_youtube_cloud_host
+from app.utils.youtube_proxy import fetch_frontend_proxy
 
 logger = get_logger(__name__)
 
@@ -52,18 +54,26 @@ def _fetch_ryd(video_id: str) -> RawMetadata | None:
 
 def _fetch_socialcounts(video_id: str) -> RawMetadata | None:
     last_exc: Exception | None = None
+    data: dict | None = None
     for attempt in range(3):
         try:
-            with httpx.Client(timeout=25.0) as client:
+            with httpx.Client(timeout=25.0, follow_redirects=True) as client:
                 resp = client.get(
                     f"{_SOCIALCOUNTS_API}/{video_id}",
                     headers={
                         "User-Agent": (
-                            "Mozilla/5.0 (compatible; Vanadium/1.0; +https://github.com/asitgiri1234/vanadium)"
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+                            "Chrome/120.0.0.0 Safari/537.36"
                         ),
-                        "Accept": "application/json",
+                        "Accept": "application/json, text/plain, */*",
+                        "Accept-Language": "en-US,en;q=0.9",
+                        "Referer": "https://socialcounts.org/",
+                        "Origin": "https://socialcounts.org",
                     },
                 )
+                if resp.status_code == 403 and is_youtube_cloud_host():
+                    break
                 resp.raise_for_status()
                 data = resp.json()
             break
@@ -76,8 +86,18 @@ def _fetch_socialcounts(video_id: str) -> RawMetadata | None:
                 exc,
             )
     else:
-        if last_exc:
+        if last_exc and not is_youtube_cloud_host():
             logger.warning("YouTube SocialCounts API failed for %s: %s", video_id, last_exc)
+            return None
+
+    if data is None and is_youtube_cloud_host():
+        proxy = fetch_frontend_proxy("stats", video_id)
+        if proxy and int(proxy.get("status") or 0) == 200:
+            data = proxy.get("data") if isinstance(proxy.get("data"), dict) else None
+        if not data:
+            logger.warning("YouTube SocialCounts proxy failed for %s", video_id)
+            return None
+    elif data is None:
         return None
 
     counters_root = data.get("counters") or {}
