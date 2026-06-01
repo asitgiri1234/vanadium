@@ -9,12 +9,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Optional
+from urllib.parse import quote
+
+import httpx
 
 from app.core.logging import get_logger
 from app.models.schemas import Platform
 from app.utils.text import extract_hashtags
 from app.utils.url_utils import detect_platform
-from app.utils.ytdlp import apply_cookie_options
+from app.utils.ytdlp import base_ytdlp_opts
 
 logger = get_logger(__name__)
 
@@ -90,28 +93,62 @@ def _format_upload_date(raw_date: Any) -> Optional[str]:
     return None
 
 
+def _metadata_is_empty(raw: RawMetadata) -> bool:
+    return raw.title == "Unknown title" and raw.creator == "Unknown creator"
+
+
 class MetadataService:
     def fetch(self, url: str) -> RawMetadata:
         platform = detect_platform(url)
         try:
-            return self._fetch_with_ytdlp(url, platform)
+            result = self._fetch_with_ytdlp(url, platform)
         except Exception as exc:  # noqa: BLE001 - extraction is best-effort
             logger.warning("Metadata extraction failed for %s: %s", url, exc)
-            return RawMetadata(platform=platform)
+            result = RawMetadata(platform=platform)
+
+        if platform == Platform.youtube and _metadata_is_empty(result):
+            oembed = self._fetch_youtube_oembed(url)
+            if oembed:
+                logger.info("YouTube metadata recovered via oEmbed for %s", url)
+                return oembed
+
+        return result
+
+    def _fetch_youtube_oembed(self, url: str) -> RawMetadata | None:
+        """Public oEmbed API — reliable title/thumbnail when yt-dlp is blocked."""
+        try:
+            oembed_url = (
+                "https://www.youtube.com/oembed"
+                f"?url={quote(url, safe='')}&format=json"
+            )
+            with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+                resp = client.get(
+                    oembed_url,
+                    headers={"User-Agent": "Vanadium/1.0 (+https://github.com/asitgiri1234/vanadium)"},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("YouTube oEmbed fallback failed for %s: %s", url, exc)
+            return None
+
+        title = (data.get("title") or "").strip()
+        if not title:
+            return None
+
+        return RawMetadata(
+            platform=Platform.youtube,
+            title=title,
+            creator=(data.get("author_name") or "Unknown creator").strip(),
+            creator_url=data.get("author_url"),
+            thumbnail=data.get("thumbnail_url"),
+        )
 
     def _fetch_with_ytdlp(self, url: str, platform: Platform) -> RawMetadata:
         # Imported lazily so the package isn't required just to import the app.
         from yt_dlp import YoutubeDL
 
-        opts = apply_cookie_options(
-            {
-                "quiet": True,
-                "no_warnings": True,
-                "skip_download": True,
-                "noplaylist": True,
-                "extract_flat": False,
-            }
-        )
+        opts = base_ytdlp_opts(skip_download=True, extract_flat=False)
         with YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
 

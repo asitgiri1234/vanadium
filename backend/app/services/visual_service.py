@@ -21,7 +21,7 @@ from app.core.logging import get_logger
 from app.models.schemas import Platform, VisualFrame
 from app.utils.llm_utils import content_to_text, parse_json_object
 from app.utils.text import clean_text, format_timestamp
-from app.utils.ytdlp import apply_cookie_options
+from app.utils.ytdlp import base_ytdlp_opts
 
 logger = get_logger(__name__)
 
@@ -77,17 +77,12 @@ class VisualService:
 
         h = settings.visual_max_height
         out_tmpl = os.path.join(work_dir, "video.%(ext)s")
-        opts = apply_cookie_options(
-            {
-                "quiet": True,
-                "no_warnings": True,
-                "noplaylist": True,
-                "outtmpl": out_tmpl,
-                "format": (
-                    f"best[height<={h}][ext=mp4]/best[height<={h}]/"
-                    "best[ext=mp4]/best"
-                ),
-            }
+        opts = base_ytdlp_opts(
+            outtmpl=out_tmpl,
+            format=(
+                f"best[height<={h}][ext=mp4]/best[height<={h}]/"
+                "best[ext=mp4]/best"
+            ),
         )
         with YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
