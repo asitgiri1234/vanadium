@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.services.metadata_service import metadata_service
 from app.utils.cookie_utils import cookies_configured
 from app.utils.instagram_embed import fetch_instagram_fallback_metadata
+from app.utils.instagram_apify import fetch_instagram_apify, fetch_instagram_apify_metadata
 from app.utils.instagram_media_api import fetch_instagram_media_info
 from app.utils.instagram_page_media import extract_instagram_media_urls
 from app.utils.url_utils import extract_youtube_id
@@ -151,10 +152,27 @@ async def debug_instagram_metadata(url: str = Query(..., description="Instagram 
     fallback = fetch_instagram_fallback_metadata(url)
     media_info = fetch_instagram_media_info(url)
     scraped = extract_instagram_media_urls(url)
+    apify = fetch_instagram_apify(url)
+    apify_meta = fetch_instagram_apify_metadata(url)
     return {
         "url": url,
         "cloud_host": is_youtube_cloud_host(),
         "cookies_configured": cookies_configured(),
+        "apify": {
+            "configured": bool(settings.apify_api_key.strip()),
+            "actor": "apify~instagram-scraper",
+            "post_found": apify.post is not None,
+            "likes": (apify.post or {}).get("likesCount"),
+            "comments_count": (apify.post or {}).get("commentsCount"),
+            "views": (apify.post or {}).get("videoViewCount"),
+            "comment_rows": len(apify.comments),
+        },
+        "apify_merged": {
+            "likes": apify_meta.likes if apify_meta else None,
+            "comments": apify_meta.comments if apify_meta else None,
+            "views": apify_meta.views if apify_meta else None,
+            "title": (apify_meta.title[:80] if apify_meta else None),
+        },
         "media_api": media_info,
         "page_scrape": {
             "like_count": scraped.get("like_count"),

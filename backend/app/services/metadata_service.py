@@ -15,6 +15,7 @@ import httpx
 from app.core.logging import get_logger
 from app.models.raw_metadata import RawMetadata
 from app.models.schemas import Platform
+from app.utils.instagram_apify import fetch_instagram_apify_metadata
 from app.utils.instagram_embed import fetch_instagram_fallback_metadata
 from app.utils.instagram_profile import fetch_instagram_profile_metadata, _extract_handle
 from app.utils.instagram_media_api import (
@@ -280,7 +281,20 @@ class MetadataService:
         result = RawMetadata(platform=Platform.instagram)
         media_hints: dict[str, Any] = {}
 
-        # Authenticated media API — most reliable source for likes/comments + video CDN.
+        # Apify instagram-scraper — likes, comments, views, caption, video CDN.
+        apify_meta = fetch_instagram_apify_metadata(url)
+        if apify_meta:
+            result = _merge_metadata(result, apify_meta)
+            if isinstance(apify_meta.raw, dict):
+                for u in apify_meta.raw.get("ig_video_urls") or []:
+                    if u:
+                        media_hints.setdefault("ig_video_urls", [])
+                        if u not in media_hints["ig_video_urls"]:
+                            media_hints["ig_video_urls"].append(u)
+                if apify_meta.raw.get("thumbnail_url"):
+                    media_hints["thumbnail_url"] = apify_meta.raw["thumbnail_url"]
+
+        # Authenticated media API — supplemental when cookies are configured.
         media_info = fetch_instagram_media_info(url)
         if media_info:
             result = _merge_metadata(result, media_info_to_raw(media_info))
