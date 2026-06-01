@@ -48,6 +48,7 @@ _INNERTUBE_CLIENTS: list[dict[str, Any]] = [
 
 _LIKE_RE = re.compile(r'"likeCount"\s*:\s*"(\d+)"')
 _COMMENT_RE = re.compile(r'"commentCount"\s*:\s*"(\d+)"')
+_VIEW_RE = re.compile(r'"viewCount"\s*:\s*"(\d+)"')
 _SUBSCRIBER_COUNT_RE = re.compile(r'"subscriberCount"\s*:\s*"(\d+)"')
 _DURATION_RE = re.compile(r'"lengthSeconds"\s*:\s*"(\d+)"')
 
