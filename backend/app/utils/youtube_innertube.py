@@ -1,8 +1,4 @@
-"""YouTube Innertube internal API — reliable metadata on cloud/datacenter IPs.
-
-Uses the public MWEB client (same endpoint the mobile site calls). Does not
-require an API key, cookies, or HTML scraping.
-"""
+"""YouTube Innertube internal API — reliable metadata on cloud/datacenter IPs."""
 
 from __future__ import annotations
 
@@ -19,18 +15,42 @@ from app.utils.url_utils import extract_youtube_id
 
 logger = get_logger(__name__)
 
-# Public innertube key embedded in YouTube's web/mobile clients.
 _INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
 
-_MWEB_CLIENT = {
-    "clientName": "MWEB",
-    "clientVersion": "2.20240405.01.00",
-    "hl": "en",
-    "gl": "US",
-}
+# Try multiple clients — MWEB works from most IPs; others as fallback.
+_INNERTUBE_CLIENTS: list[dict[str, Any]] = [
+    {
+        "clientName": "MWEB",
+        "clientVersion": "2.20240405.01.00",
+        "hl": "en",
+        "gl": "US",
+    },
+    {
+        "clientName": "WEB",
+        "clientVersion": "2.20240405.00.00",
+        "hl": "en",
+        "gl": "US",
+    },
+    {
+        "clientName": "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+        "clientVersion": "2.0",
+        "hl": "en",
+        "gl": "US",
+    },
+]
 
 _LIKE_RE = re.compile(r'"likeCount"\s*:\s*"(\d+)"')
 _COMMENT_RE = re.compile(r'"commentCount"\s*:\s*"(\d+)"')
+
+_HEADERS = {
+    "Content-Type": "application/json",
+    "User-Agent": (
+        "Mozilla/5.0 (Linux; Android 10; Mobile) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+    ),
+    "Origin": "https://www.youtube.com",
+    "Referer": "https://www.youtube.com/",
+}
 
 
 def _parse_upload_date(raw: Any) -> str | None:
@@ -45,7 +65,7 @@ def _parse_upload_date(raw: Any) -> str | None:
 
 
 def _metric_from_micro_or_json(
-    micro: dict[str, Any], html_blob: str, key: str, pattern: re.Pattern[str]
+    micro: dict[str, Any], blob: str, key: str, pattern: re.Pattern[str]
 ) -> int | None:
     raw = micro.get(key)
     if raw is not None:
@@ -54,7 +74,7 @@ def _metric_from_micro_or_json(
             return n if n >= 0 else None
         except (TypeError, ValueError):
             pass
-    match = pattern.search(html_blob)
+    match = pattern.search(blob)
     if match:
         try:
             return int(match.group(1))
@@ -63,58 +83,25 @@ def _metric_from_micro_or_json(
     return None
 
 
-def fetch_youtube_innertube_metadata(url: str) -> RawMetadata | None:
-    """Fetch full YouTube metadata via the innertube player endpoint."""
-    video_id = extract_youtube_id(url)
-    if not video_id:
-        return None
-
-    payload = {
-        "context": {"client": _MWEB_CLIENT},
-        "videoId": video_id,
-    }
-
-    try:
-        with httpx.Client(timeout=25.0) as client:
-            resp = client.post(
-                f"https://www.youtube.com/youtubei/v1/player?key={_INNERTUBE_API_KEY}",
-                json=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "User-Agent": (
-                        "Mozilla/5.0 (Linux; Android 10; Mobile) "
-                        "AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36"
-                    ),
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("YouTube innertube failed for %s: %s", url, exc)
-        return None
-
+def _parse_innertube_response(data: dict[str, Any], video_id: str) -> RawMetadata | None:
     details = data.get("videoDetails") or {}
     title = (details.get("title") or "").strip()
     if not title:
-        status = (data.get("playabilityStatus") or {}).get("status")
-        logger.warning(
-            "YouTube innertube: no title for %s (playability=%s)", video_id, status
-        )
+        return None
+
+    views = int(details.get("viewCount") or 0)
+    duration = int(details.get("lengthSeconds") or 0)
+    if views == 0 and duration == 0:
         return None
 
     micro = (data.get("microformat") or {}).get("playerMicroformatRenderer") or {}
     blob = json.dumps(data)
-
     channel_id = details.get("channelId")
+
     thumbnails = details.get("thumbnail", {}).get("thumbnails") or []
     thumbnail = thumbnails[-1].get("url") if thumbnails else None
     if not thumbnail:
         thumbnail = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
-
-    views = int(details.get("viewCount") or 0)
-    duration = int(details.get("lengthSeconds") or 0)
-    likes = _metric_from_micro_or_json(micro, blob, "likeCount", _LIKE_RE)
-    comments = _metric_from_micro_or_json(micro, blob, "commentCount", _COMMENT_RE)
 
     return RawMetadata(
         platform=Platform.youtube,
@@ -123,9 +110,54 @@ def fetch_youtube_innertube_metadata(url: str) -> RawMetadata | None:
         creator_url=f"https://www.youtube.com/channel/{channel_id}" if channel_id else None,
         thumbnail=thumbnail,
         views=views,
-        likes=likes,
-        comments=comments,
+        likes=_metric_from_micro_or_json(micro, blob, "likeCount", _LIKE_RE),
+        comments=_metric_from_micro_or_json(micro, blob, "commentCount", _COMMENT_RE),
         duration_seconds=duration,
         upload_date=_parse_upload_date(micro.get("publishDate") or micro.get("uploadDate")),
         description=(details.get("shortDescription") or "").strip(),
     )
+
+
+def fetch_youtube_innertube_metadata(url: str) -> RawMetadata | None:
+    """Fetch full YouTube metadata via the innertube player endpoint."""
+    video_id = extract_youtube_id(url)
+    if not video_id:
+        return None
+
+    endpoint = f"https://www.youtube.com/youtubei/v1/player?key={_INNERTUBE_API_KEY}"
+
+    for client in _INNERTUBE_CLIENTS:
+        payload = {"context": {"client": client}, "videoId": video_id}
+        try:
+            with httpx.Client(timeout=30.0) as http:
+                resp = http.post(endpoint, json=payload, headers=_HEADERS)
+                if resp.status_code != 200:
+                    logger.warning(
+                        "YouTube innertube %s HTTP %s for %s",
+                        client.get("clientName"),
+                        resp.status_code,
+                        video_id,
+                    )
+                    continue
+                data = resp.json()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "YouTube innertube %s failed for %s: %s",
+                client.get("clientName"),
+                video_id,
+                exc,
+            )
+            continue
+
+        parsed = _parse_innertube_response(data, video_id)
+        if parsed:
+            logger.info(
+                "YouTube innertube (%s): views=%s for %s",
+                client.get("clientName"),
+                parsed.views,
+                video_id,
+            )
+            return parsed
+
+    logger.warning("YouTube innertube: all clients failed for %s", video_id)
+    return None
