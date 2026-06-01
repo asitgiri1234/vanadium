@@ -276,6 +276,15 @@ def fetch_youtube_transcript_raw(url: str) -> list[dict]:
         if segments:
             return segments
 
+    if cloud:
+        proxy = fetch_frontend_proxy("transcript", video_id)
+        if proxy:
+            segments = proxy.get("segments") or []
+            if isinstance(segments, list) and segments:
+                parsed = [s for s in segments if isinstance(s, dict)]
+                if parsed:
+                    return parsed
+
     for fetcher in (
         _fetch_from_transcript_api,
         _fetch_from_transcript_api_list,
@@ -285,17 +294,5 @@ def fetch_youtube_transcript_raw(url: str) -> list[dict]:
         segments = fetcher(video_id)
         if segments:
             return segments
-
-    if cloud:
-        logger.info(
-            "YouTube transcript unavailable on cloud host for %s "
-            "(set SUPADATA_API_KEY for reliable captions)",
-            video_id,
-        )
-        proxy = fetch_frontend_proxy("transcript", video_id)
-        if proxy:
-            segments = proxy.get("segments") or []
-            if isinstance(segments, list) and segments:
-                return [s for s in segments if isinstance(s, dict)]
 
     return []
