@@ -1,0 +1,143 @@
+================================================================================
+  INSTAGRAM cookies.txt — WHAT TO SUBMIT & WHICH LINES MATTER
+================================================================================
+
+IMPORTANT
+---------
+• You do NOT pick one line or one value to paste into Render.
+• You submit the ENTIRE file (all lines) as one Secret File on Render.
+• Never commit this file to GitHub, never paste it in chat or email.
+• If cookies were ever shared publicly, log out of Instagram, log back in,
+  export a fresh file, and use the new file only.
+
+WHAT YOU UPLOAD TO RENDER
+-------------------------
+Render dashboard → vanadium-api → Environment → Secret Files
+
+  Filename on Render:  instagram_cookies.txt
+  Contents:            paste EVERY line from your export (see example below)
+
+Then set this environment variable:
+
+  INSTAGRAM_COOKIES_FILE=/etc/secrets/instagram_cookies.txt
+
+
+================================================================================
+  EXAMPLE FILE (your export format — secret values REDACTED below)
+================================================================================
+
+Copy/paste the WHOLE block from your browser extension export.
+Below, each line is labeled: REQUIRED, HELPFUL, or OPTIONAL.
+
+
+# Netscape HTTP Cookie File          ← keep this header line (first line)
+# https://curl.haxx.se/rfc/cookie_spec.html
+# This is a generated file! Do not edit.
+
+.instagram.com  ...  datr         vW2EaR_4Wsf...     [OPTIONAL]
+  └─ Browser/device fingerprint. Usually present; helps look like a real browser.
+
+.instagram.com  ...  ig_did       3BC7CEBB-CAC6...   [HELPFUL]
+  └─ Instagram device ID. Often needed alongside session for API calls.
+
+.instagram.com  ...  ig_nrcb      1                  [OPTIONAL]
+  └─ Internal flag cookie.
+
+.instagram.com  ...  ps_l         1                  [OPTIONAL]
+.instagram.com  ...  ps_n         1                  [OPTIONAL]
+  └─ Privacy / session related; not critical alone.
+
+.instagram.com  ...  mid          aclrqAALAAH...     [OPTIONAL]
+  └─ Machine / session identifier.
+
+.instagram.com  ...  dpr          1.25               [OPTIONAL]
+.instagram.com  ...  wd           1536x695           [OPTIONAL]
+  └─ Screen size from your browser; nice to have, not authentication.
+
+.instagram.com  ...  ds_user_id   65176455881        [REQUIRED ★]
+  └─ YOUR logged-in Instagram user ID.
+  └─ WHY: Proves which account the session belongs to.
+
+.instagram.com  ...  locale       en_US              [OPTIONAL]
+  └─ Language preference only.
+
+.instagram.com  ...  csrftoken    X3R2uBW06iPW...    [REQUIRED ★★]
+  └─ Anti-forgery token for authenticated requests.
+  └─ WHY: Instagram rejects many logged-in API calls without this.
+
+.instagram.com  ...  sessionid    65176455881%3AUG6... [REQUIRED ★★★ MOST IMPORTANT]
+  └─ This IS your login session (like "stay logged in").
+  └─ WHY: Without sessionid, Instagram treats Render as a logged-out visitor
+     → hidden followers, hidden views, failed reel downloads.
+
+.instagram.com  ...  rur          "SCU\054651764..."  [HELPFUL]
+  └─ Routing / region cookie tied to your account. Include it if exported.
+
+
+================================================================================
+  THE THREE COOKIES VANADIUM CARES ABOUT MOST
+================================================================================
+
+  ★★★  sessionid     →  "Am I logged in?"
+  ★★   csrftoken     →  "Is this a valid authenticated request?"
+  ★    ds_user_id    →  "Which account is logged in?"
+
+If sessionid OR csrftoken is missing from your export:
+  → Log into instagram.com again in Chrome/Edge
+  → Stay on https://www.instagram.com/ (any page)
+  → Re-export with "Get cookies.txt LOCALLY"
+  → Check the new file has those two lines before uploading.
+
+
+================================================================================
+  WHAT YOU DO NOT SUBMIT
+================================================================================
+
+  ✗  Only the sessionid value by itself
+  ✗  Only csrftoken pasted into a Render env var
+  ✗  Your Instagram username or password (Vanadium never uses these)
+  ✗  A screenshot of cookies from DevTools (wrong format — need Netscape .txt)
+
+
+================================================================================
+  HOW THE APP USES THE FULL FILE (any public reel you analyze)
+================================================================================
+
+  You paste ONE reel URL  →  Backend reads the WHOLE cookies.txt
+                          →  Attaches session to EVERY Instagram request:
+
+       GET reel page / yt-dlp download     + cookies
+       GET creator profile for followers   + cookies
+       Download reel audio for Whisper     + cookies
+
+  Same session file works for ANY public reel URL you analyze later.
+  You do NOT export a new file per reel or per creator page.
+
+
+================================================================================
+  QUICK CHECKLIST BEFORE UPLOAD
+================================================================================
+
+  [ ]  File starts with "# Netscape HTTP Cookie File"
+  [ ]  Line containing "sessionid" is present
+  [ ]  Line containing "csrftoken" is present
+  [ ]  All lines start with .instagram.com
+  [ ]  Exported while logged into throwaway account on instagram.com
+  [ ]  Pasted entire file into Render Secret File (not split up)
+  [ ]  INSTAGRAM_COOKIES_FILE=/etc/secrets/instagram_cookies.txt set
+  [ ]  Service redeployed after saving
+
+
+================================================================================
+  SECURITY REMINDER
+================================================================================
+
+  Anyone with your sessionid + csrftoken can act as your Instagram account
+  until the session expires. Treat cookies.txt like a password file.
+
+  If you pasted cookies in chat or committed them by mistake:
+    1. Instagram → Settings → Log out of other sessions (or change password)
+    2. Export a brand-new cookies.txt
+    3. Replace the file on Render Secret Files only
+
+================================================================================

@@ -29,9 +29,40 @@ function parseJson3(raw: string): CaptionSegment[] {
   }
 }
 
+function parseXmlTranscript(raw: string): CaptionSegment[] {
+  const segments: CaptionSegment[] = [];
+  const re = /<text start="([^"]+)"[^>]*>([\s\S]*?)<\/text>/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(raw)) !== null) {
+    const start = parseFloat(match[1] || "0");
+    const text = match[2]
+      .replace(/<[^>]+>/g, "")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&#39;/g, "'")
+      .replace(/&quot;/g, '"')
+      .trim();
+    if (text) segments.push({ text, start, duration: 0 });
+  }
+  return segments;
+}
+
+async function fetchViaTranscriptPlus(videoId: string): Promise<CaptionSegment[]> {
+  try {
+    const { fetchTranscript } = await import("youtube-transcript-plus");
+    const fetched = await fetchTranscript(videoId, { lang: "en" });
+    return fetched.map((item) => ({
+      text: item.text,
+      start: item.offset ?? 0,
+      duration: item.duration ?? 0,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 async function fetchViaYoutubeTranscript(videoId: string): Promise<CaptionSegment[]> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 25000);
   try {
     const { YoutubeTranscript } = await import("youtube-transcript");
     const fetched = await YoutubeTranscript.fetchTranscript(videoId, { lang: "en" });
@@ -42,15 +73,35 @@ async function fetchViaYoutubeTranscript(videoId: string): Promise<CaptionSegmen
     }));
   } catch {
     return [];
-  } finally {
-    clearTimeout(timer);
   }
+}
+
+async function fetchCaptionUrl(baseUrl: string): Promise<CaptionSegment[]> {
+  for (const suffix of ["&fmt=json3", "&fmt=vtt", ""]) {
+    try {
+      const captionResp = await fetch(`${baseUrl}${suffix}`, { cache: "no-store" });
+      if (!captionResp.ok) continue;
+      const text = await captionResp.text();
+      if (suffix.includes("json3") || text.trim().startsWith("{")) {
+        const parsed = parseJson3(text);
+        if (parsed.length) return parsed;
+      }
+      if (text.includes("<text")) {
+        const parsed = parseXmlTranscript(text);
+        if (parsed.length) return parsed;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return [];
 }
 
 async function fetchViaInnertubeCaptions(videoId: string): Promise<CaptionSegment[]> {
   const clients = [
-    { clientName: "WEB", clientVersion: "2.20240405.00.00", hl: "en", gl: "US" },
+    { clientName: "ANDROID", clientVersion: "20.10.38", hl: "en", gl: "US" },
     { clientName: "MWEB", clientVersion: "2.20240405.01.00", hl: "en", gl: "US" },
+    { clientName: "WEB", clientVersion: "2.20240405.00.00", hl: "en", gl: "US" },
     { clientName: "TVHTML5_SIMPLY_EMBEDDED_PLAYER", clientVersion: "2.0", hl: "en", gl: "US" },
   ];
 
@@ -76,15 +127,18 @@ async function fetchViaInnertubeCaptions(videoId: string): Promise<CaptionSegmen
     const tracks =
       player?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
 
-    for (const track of tracks) {
-      const lang = String(track.languageCode ?? "");
-      if (lang && !lang.startsWith("en")) continue;
+    const sorted = [...tracks].sort((a, b) => {
+      const la = String(a.languageCode ?? "");
+      const lb = String(b.languageCode ?? "");
+      const score = (lang: string) =>
+        lang.startsWith("en") ? 0 : lang.startsWith("a.en") ? 1 : 2;
+      return score(la) - score(lb);
+    });
+
+    for (const track of sorted) {
       const baseUrl = String(track.baseUrl ?? "");
       if (!baseUrl) continue;
-
-      const captionResp = await fetch(`${baseUrl}&fmt=json3`, { cache: "no-store" });
-      if (!captionResp.ok) continue;
-      const segments = parseJson3(await captionResp.text());
+      const segments = await fetchCaptionUrl(baseUrl);
       if (segments.length) return segments;
     }
   }
@@ -98,10 +152,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    let segments = await fetchViaYoutubeTranscript(videoId);
-    if (!segments.length) {
-      segments = await fetchViaInnertubeCaptions(videoId);
-    }
+    let segments = await fetchViaTranscriptPlus(videoId);
+    if (!segments.length) segments = await fetchViaYoutubeTranscript(videoId);
+    if (!segments.length) segments = await fetchViaInnertubeCaptions(videoId);
     return NextResponse.json({ segments });
   } catch (error) {
     return NextResponse.json(
