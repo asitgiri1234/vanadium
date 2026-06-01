@@ -4,17 +4,18 @@ import type {
   TranscriptResponse,
   VisualResponse,
 } from "./types";
+import {
+  isLocalApiUrl,
+  normalizeApiUrl,
+  PRODUCTION_API_URL,
+} from "./backend-url";
 
-const BUILD_TIME_URL = (
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-).replace(/\/$/, "");
+const BUILD_TIME_URL = normalizeApiUrl(
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
+);
 
 let resolvedApiUrl: string | null = null;
 let apiUrlPromise: Promise<string> | null = null;
-
-function isLocalUrl(url: string): boolean {
-  return url.includes("localhost") || url.startsWith("http://127.0.0.1");
-}
 
 /** Resolve backend base URL (Render in prod, localhost in dev). */
 export async function getApiBaseUrl(): Promise<string> {
@@ -25,7 +26,7 @@ export async function getApiBaseUrl(): Promise<string> {
 }
 
 async function resolveApiBaseUrl(): Promise<string> {
-  if (!isLocalUrl(BUILD_TIME_URL)) return BUILD_TIME_URL;
+  if (!isLocalApiUrl(BUILD_TIME_URL)) return BUILD_TIME_URL;
 
   // Production bundle still points at localhost — read runtime URL from Vercel.
   if (typeof window !== "undefined" && window.location.protocol === "https:") {
@@ -33,12 +34,14 @@ async function resolveApiBaseUrl(): Promise<string> {
       const res = await fetch("/api/config");
       if (res.ok) {
         const body = (await res.json()) as { apiUrl?: string };
-        const apiUrl = body.apiUrl?.replace(/\/$/, "") ?? "";
-        if (apiUrl && !isLocalUrl(apiUrl)) return apiUrl;
+        let apiUrl = normalizeApiUrl(body.apiUrl ?? "");
+        if (isLocalApiUrl(apiUrl)) apiUrl = PRODUCTION_API_URL;
+        if (apiUrl) return apiUrl;
       }
     } catch {
-      /* use build-time fallback */
+      /* use production fallback below */
     }
+    return PRODUCTION_API_URL;
   }
 
   return BUILD_TIME_URL;
@@ -51,7 +54,7 @@ function fetchErrorMessage(err: unknown, apiUrl: string, path: string): string {
   ) {
     const isProd =
       typeof window !== "undefined" && window.location.protocol === "https:";
-    if (isProd && isLocalUrl(apiUrl)) {
+    if (isProd && isLocalApiUrl(apiUrl)) {
       return (
         "Cannot reach the API — backend URL is still localhost. " +
         "In Vercel set API_URL=https://vanadium-1.onrender.com (or NEXT_PUBLIC_API_URL) " +
