@@ -75,45 +75,6 @@ async function fetchWatchHtml(videoId: string): Promise<string | null> {
   return null;
 }
 
-async function fetchViaWatchHtml(videoId: string): Promise<CaptionSegment[]> {
-  const html = await fetchWatchHtml(videoId);
-  if (!html) return [];
-
-  const tracks = extractJsonArray(html, '"captionTracks":') as
-    | Array<{ languageCode?: string; baseUrl?: string }>
-    | null;
-  if (!tracks?.length) return [];
-
-  for (const track of tracks) {
-    const lang = String(track.languageCode ?? "");
-    if (lang && !lang.startsWith("en")) continue;
-    const baseUrl = String(track.baseUrl ?? "");
-    if (!baseUrl) continue;
-
-    const captionResp = await fetch(`${baseUrl}&fmt=json3`, { cache: "no-store" });
-    if (!captionResp.ok) continue;
-    const segments = parseJson3(await captionResp.text());
-    if (segments.length) return segments;
-  }
-
-  return [];
-}
-
-async function fetchViaTranscriptApi(videoId: string): Promise<CaptionSegment[]> {
-  try {
-    const { YouTubeTranscriptApi } = await import("youtube-transcript-api");
-    const api = new YouTubeTranscriptApi();
-    const fetched = await api.fetch(videoId);
-    return fetched.map((item) => ({
-      text: item.text,
-      start: item.start,
-      duration: item.duration,
-    }));
-  } catch {
-    return [];
-  }
-}
-
 export async function GET(request: NextRequest) {
   const videoId = request.nextUrl.searchParams.get("videoId")?.trim();
   if (!videoId) {
@@ -121,11 +82,30 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    let segments = await fetchViaWatchHtml(videoId);
-    if (!segments.length) {
-      segments = await fetchViaTranscriptApi(videoId);
+    const html = await fetchWatchHtml(videoId);
+    if (!html) {
+      return NextResponse.json({ segments: [] });
     }
-    return NextResponse.json({ segments });
+
+    const tracks = extractJsonArray(html, '"captionTracks":') as
+      | Array<{ languageCode?: string; baseUrl?: string }>
+      | null;
+
+    for (const track of tracks ?? []) {
+      const lang = String(track.languageCode ?? "");
+      if (lang && !lang.startsWith("en")) continue;
+      const baseUrl = String(track.baseUrl ?? "");
+      if (!baseUrl) continue;
+
+      const captionResp = await fetch(`${baseUrl}&fmt=json3`, { cache: "no-store" });
+      if (!captionResp.ok) continue;
+      const segments = parseJson3(await captionResp.text());
+      if (segments.length) {
+        return NextResponse.json({ segments });
+      }
+    }
+
+    return NextResponse.json({ segments: [] });
   } catch (error) {
     return NextResponse.json(
       {
