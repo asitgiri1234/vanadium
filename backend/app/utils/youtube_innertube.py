@@ -17,6 +17,11 @@ logger = get_logger(__name__)
 
 _INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
 
+_INNERTUBE_ENDPOINTS = (
+    "https://youtubei.googleapis.com/youtubei/v1/player",
+    "https://www.youtube.com/youtubei/v1/player",
+)
+
 # Try multiple clients — MWEB works from most IPs; others as fallback.
 _INNERTUBE_CLIENTS: list[dict[str, Any]] = [
     {
@@ -124,40 +129,44 @@ def fetch_youtube_innertube_metadata(url: str) -> RawMetadata | None:
     if not video_id:
         return None
 
-    endpoint = f"https://www.youtube.com/youtubei/v1/player?key={_INNERTUBE_API_KEY}"
+    for base in _INNERTUBE_ENDPOINTS:
+        endpoint = f"{base}?key={_INNERTUBE_API_KEY}"
+        for client in _INNERTUBE_CLIENTS:
+            payload = {"context": {"client": client}, "videoId": video_id}
+            try:
+                with httpx.Client(timeout=30.0) as http:
+                    resp = http.post(endpoint, json=payload, headers=_HEADERS)
+                    if resp.status_code != 200:
+                        logger.warning(
+                            "YouTube innertube %s HTTP %s (%s) for %s",
+                            client.get("clientName"),
+                            resp.status_code,
+                            base.split("/")[2],
+                            video_id,
+                        )
+                        continue
+                    data = resp.json()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "YouTube innertube %s failed (%s) for %s: %s",
+                    client.get("clientName"),
+                    base.split("/")[2],
+                    video_id,
+                    exc,
+                )
+                continue
 
-    for client in _INNERTUBE_CLIENTS:
-        payload = {"context": {"client": client}, "videoId": video_id}
-        try:
-            with httpx.Client(timeout=30.0) as http:
-                resp = http.post(endpoint, json=payload, headers=_HEADERS)
-                if resp.status_code != 200:
-                    logger.warning(
-                        "YouTube innertube %s HTTP %s for %s",
-                        client.get("clientName"),
-                        resp.status_code,
-                        video_id,
-                    )
-                    continue
-                data = resp.json()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "YouTube innertube %s failed for %s: %s",
-                client.get("clientName"),
-                video_id,
-                exc,
-            )
-            continue
+            parsed = _parse_innertube_response(data, video_id)
+            if parsed:
+                logger.info(
+                    "YouTube innertube (%s via %s): views=%s duration=%s for %s",
+                    client.get("clientName"),
+                    base.split("/")[2],
+                    parsed.views,
+                    parsed.duration_seconds,
+                    video_id,
+                )
+                return parsed
 
-        parsed = _parse_innertube_response(data, video_id)
-        if parsed:
-            logger.info(
-                "YouTube innertube (%s): views=%s for %s",
-                client.get("clientName"),
-                parsed.views,
-                video_id,
-            )
-            return parsed
-
-    logger.warning("YouTube innertube: all clients failed for %s", video_id)
+    logger.warning("YouTube innertube: all clients/endpoints failed for %s", video_id)
     return None

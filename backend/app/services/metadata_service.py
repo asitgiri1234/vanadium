@@ -158,7 +158,7 @@ class MetadataService:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("yt-dlp failed for %s: %s", url, exc)
 
-        if not cloud and (_youtube_needs_views(result) or _youtube_needs_details(result)):
+        if _youtube_needs_views(result) or _youtube_needs_details(result):
             innertube = fetch_youtube_innertube_metadata(url)
             if innertube:
                 logger.info("YouTube metadata enriched via innertube for %s", url)

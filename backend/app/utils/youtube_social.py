@@ -51,30 +51,49 @@ def _fetch_ryd(video_id: str) -> RawMetadata | None:
 
 
 def _fetch_socialcounts(video_id: str) -> RawMetadata | None:
-    try:
-        with httpx.Client(timeout=20.0) as client:
-            resp = client.get(
-                f"{_SOCIALCOUNTS_API}/{video_id}",
-                headers={"User-Agent": "Vanadium/1.0", "Accept": "application/json"},
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        try:
+            with httpx.Client(timeout=25.0) as client:
+                resp = client.get(
+                    f"{_SOCIALCOUNTS_API}/{video_id}",
+                    headers={
+                        "User-Agent": (
+                            "Mozilla/5.0 (compatible; Vanadium/1.0; +https://github.com/asitgiri1234/vanadium)"
+                        ),
+                        "Accept": "application/json",
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            break
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            logger.warning(
+                "YouTube SocialCounts API attempt %s failed for %s: %s",
+                attempt + 1,
+                video_id,
+                exc,
             )
-            resp.raise_for_status()
-            data = resp.json()
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("YouTube SocialCounts API failed for %s: %s", video_id, exc)
+    else:
+        if last_exc:
+            logger.warning("YouTube SocialCounts API failed for %s: %s", video_id, last_exc)
         return None
 
-    counters = (data.get("counters") or {}).get("api") or (data.get("counters") or {}).get(
-        "estimation"
-    ) or {}
+    counters_root = data.get("counters") or {}
+    counters = counters_root.get("api") or counters_root.get("estimation") or {}
     views = int(counters.get("viewCount") or 0)
-    if views <= 0:
+    comments = _safe_int(counters.get("commentCount"))
+    likes = _safe_int(counters.get("likeCount"))
+
+    if views <= 0 and comments is None:
         return None
 
     return RawMetadata(
         platform=Platform.youtube,
         views=views,
-        likes=_safe_int(counters.get("likeCount")),
-        comments=_safe_int(counters.get("commentCount")),
+        likes=likes,
+        comments=comments,
     )
 
 
