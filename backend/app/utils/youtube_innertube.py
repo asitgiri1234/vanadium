@@ -91,7 +91,7 @@ def _parse_innertube_response(data: dict[str, Any], video_id: str) -> RawMetadat
 
     views = int(details.get("viewCount") or 0)
     duration = int(details.get("lengthSeconds") or 0)
-    if views == 0 and duration == 0:
+    if views == 0 and duration == 0 and not title:
         return None
 
     micro = (data.get("microformat") or {}).get("playerMicroformatRenderer") or {}

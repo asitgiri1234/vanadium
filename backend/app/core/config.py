@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     # yt-dlp and watch-page scraping are blocked. Free tier: 10k units/day.
     youtube_api_key: str = Field(default="", alias="YOUTUBE_API_KEY")
 
+    # Optional Supadata key — cloud transcript fallback when YouTube blocks captions.
+    supadata_api_key: str = Field(default="", alias="SUPADATA_API_KEY")
+
     # Visual understanding (vision LLM reads scene + on-screen text from frames).
     enable_visual: bool = Field(default=False, alias="ENABLE_VISUAL")
     enable_ocr: bool = Field(default=False, alias="ENABLE_OCR")

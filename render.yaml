@@ -49,3 +49,7 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: SUPADATA_API_KEY
+        sync: false

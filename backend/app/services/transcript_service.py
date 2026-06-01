@@ -1,13 +1,7 @@
 """Transcript extraction.
 
-- **YouTube**: ``youtube-transcript-api`` (fast, no download). Supports both the
-  legacy (<=0.6) and new (>=1.0) call styles.
-- **Instagram Reels**: ``yt-dlp`` downloads audio, then Whisper transcribes it.
-  Production uses **Groq Whisper API** (no local PyTorch). Local dev can use
-  ``WHISPER_PROVIDER=local`` with ``openai-whisper`` installed.
-
-All failures degrade to an empty transcript so the rest of the pipeline (metadata,
-engagement, comparison) still works.
+- **YouTube**: caption APIs with cloud fallbacks; optional Groq Whisper when enabled.
+- **Instagram Reels**: yt-dlp audio + Groq Whisper (or local Whisper).
 """
 
 from __future__ import annotations
@@ -21,6 +15,8 @@ from app.core.logging import get_logger
 from app.models.schemas import Platform, TranscriptSegment
 from app.services.llm_service import GROQ_BASE_URL
 from app.utils.url_utils import extract_youtube_id
+from app.utils.youtube_captions import fetch_youtube_transcript_raw
+from app.utils.youtube_cloud import is_youtube_cloud_host
 from app.utils.ytdlp import base_ytdlp_opts
 
 logger = get_logger(__name__)
@@ -28,7 +24,6 @@ logger = get_logger(__name__)
 
 class TranscriptService:
     def __init__(self) -> None:
-        # Cached local Whisper model (WHISPER_PROVIDER=local only).
         self._whisper_model = None
         self._whisper_lock = threading.Lock()
 
@@ -38,12 +33,11 @@ class TranscriptService:
                 return self._youtube(url)
             if platform == Platform.instagram:
                 return self._instagram(url)
-        except Exception as exc:  # noqa: BLE001 - best-effort extraction
+        except Exception as exc:  # noqa: BLE001
             logger.warning("Transcript extraction failed for %s: %s", url, exc)
         return []
 
     def resolve_whisper_backend(self) -> str | None:
-        """Which IG transcription backend is active: groq, local, or None."""
         if not settings.enable_whisper:
             return None
         provider = settings.whisper_provider.lower().strip()
@@ -51,22 +45,22 @@ class TranscriptService:
             return "groq" if settings.groq_configured else None
         if provider == "local":
             return "local"
-        # auto — prefer Groq cloud (works on Render free tier; no PyTorch RAM)
         if settings.groq_configured:
             return "groq"
         return "local"
 
-    # ----------------------------------------------------------------- #
-    # YouTube
-    # ----------------------------------------------------------------- #
     def _youtube(self, url: str) -> list[TranscriptSegment]:
         video_id = extract_youtube_id(url)
         if not video_id:
             logger.warning("Could not parse YouTube id from %s", url)
             return []
 
-        raw = self._fetch_youtube_raw(video_id)
-        if not raw:
+        raw = fetch_youtube_transcript_raw(url)
+
+        if not raw and settings.enable_whisper and not is_youtube_cloud_host():
+            raw = self._fetch_youtube_whisper(url)
+
+        if not raw and not is_youtube_cloud_host():
             raw = self._fetch_youtube_captions_ytdlp(url)
 
         segments: list[TranscriptSegment] = []
@@ -84,31 +78,52 @@ class TranscriptService:
         logger.info("YouTube transcript: %d segments for %s", len(segments), video_id)
         return segments
 
-    @staticmethod
-    def _fetch_youtube_raw(video_id: str) -> list[dict]:
-        from youtube_transcript_api import YouTubeTranscriptApi  # type: ignore
+    def _fetch_youtube_whisper(self, url: str) -> list[dict]:
+        """Groq/local Whisper fallback when caption APIs are blocked."""
+        backend = self.resolve_whisper_backend()
+        if not backend:
+            return []
+
+        audio_path = self._download_youtube_audio(url)
+        if not audio_path:
+            return []
 
         try:
-            api = YouTubeTranscriptApi()
-            fetched = api.fetch(video_id)
+            if backend == "groq":
+                segments = self._transcribe_groq(audio_path)
+            else:
+                segments = self._transcribe_whisper_local(audio_path)
             return [
                 {"text": s.text, "start": s.start, "duration": s.duration}
-                for s in fetched
+                for s in segments
             ]
-        except (TypeError, AttributeError):
-            pass
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("YouTube transcript API failed for %s: %s", video_id, exc)
+        finally:
+            try:
+                os.remove(audio_path)
+            except OSError:
+                pass
 
+    @staticmethod
+    def _download_youtube_audio(url: str) -> str | None:
+        from yt_dlp import YoutubeDL
+
+        tmp_dir = tempfile.mkdtemp(prefix="vanadium_yt_")
+        out_tmpl = os.path.join(tmp_dir, "audio.%(ext)s")
         try:
-            return YouTubeTranscriptApi.get_transcript(video_id)  # type: ignore[attr-defined]
+            opts = base_ytdlp_opts(
+                format="bestaudio/best",
+                outtmpl=out_tmpl,
+            )
+            with YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                path = ydl.prepare_filename(info)
+            return path if os.path.exists(path) else None
         except Exception as exc:  # noqa: BLE001
-            logger.warning("YouTube transcript API (legacy) failed for %s: %s", video_id, exc)
-            return []
+            logger.warning("YouTube audio download failed for %s: %s", url, exc)
+            return None
 
     @staticmethod
     def _fetch_youtube_captions_ytdlp(url: str) -> list[dict]:
-        """Fallback: pull auto-generated captions via yt-dlp when the transcript API is blocked."""
         from yt_dlp import YoutubeDL
 
         try:
@@ -148,58 +163,10 @@ class TranscriptService:
             logger.warning("YouTube caption download failed for %s: %s", url, exc)
             return []
 
-        return TranscriptService._parse_vtt(text)
+        from app.utils.youtube_captions import _parse_vtt
 
-    @staticmethod
-    def _parse_vtt(vtt: str) -> list[dict]:
-        """Minimal WebVTT → transcript segments."""
-        segments: list[dict] = []
-        block: list[str] = []
-        start_sec = 0.0
+        return _parse_vtt(text)
 
-        def ts_to_sec(ts: str) -> float:
-            parts = ts.strip().split(":")
-            if len(parts) == 3:
-                h, m, s = parts
-                return int(h) * 3600 + int(m) * 60 + float(s.replace(",", "."))
-            if len(parts) == 2:
-                m, s = parts
-                return int(m) * 60 + float(s.replace(",", "."))
-            return 0.0
-
-        for line in vtt.splitlines():
-            if "-->" in line:
-                start_sec = ts_to_sec(line.split("-->")[0])
-                block = []
-                continue
-            stripped = line.strip()
-            if not stripped or stripped.startswith("WEBVTT") or stripped.isdigit():
-                continue
-            if stripped.startswith("NOTE"):
-                block = []
-                continue
-            block.append(stripped)
-            if block:
-                segments.append(
-                    {
-                        "text": " ".join(block),
-                        "start": start_sec,
-                        "duration": 0.0,
-                    }
-                )
-                block = []
-
-        # Merge duplicate consecutive lines from VTT cue overlap
-        merged: list[dict] = []
-        for seg in segments:
-            if merged and merged[-1]["text"] == seg["text"]:
-                continue
-            merged.append(seg)
-        return merged
-
-    # ----------------------------------------------------------------- #
-    # Instagram (yt-dlp audio -> Groq Whisper API or local Whisper)
-    # ----------------------------------------------------------------- #
     def _instagram(self, url: str) -> list[TranscriptSegment]:
         backend = self.resolve_whisper_backend()
         if not backend:
@@ -227,17 +194,17 @@ class TranscriptService:
 
         tmp_dir = tempfile.mkdtemp(prefix="vanadium_")
         out_tmpl = os.path.join(tmp_dir, "audio.%(ext)s")
-        opts = base_ytdlp_opts(
-            format="bestaudio/best",
-            outtmpl=out_tmpl,
-        )
-        with YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            path = ydl.prepare_filename(info)
-        return path if os.path.exists(path) else None
+        opts = base_ytdlp_opts(format="bestaudio/best", outtmpl=out_tmpl)
+        try:
+            with YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                path = ydl.prepare_filename(info)
+            return path if os.path.exists(path) else None
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("IG audio download failed for %s: %s", url, exc)
+            return None
 
     def _transcribe_groq(self, audio_path: str) -> list[TranscriptSegment]:
-        """Groq-hosted Whisper — no local PyTorch; works on low-RAM hosts."""
         from openai import OpenAI
 
         client = OpenAI(api_key=settings.groq_api_key, base_url=GROQ_BASE_URL)
