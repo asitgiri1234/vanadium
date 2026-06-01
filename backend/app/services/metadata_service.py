@@ -7,13 +7,13 @@ sensible defaults so ingestion never hard-fails on a single missing field.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any, Optional
 from urllib.parse import quote
 
 import httpx
 
 from app.core.logging import get_logger
+from app.models.raw_metadata import RawMetadata
 from app.models.schemas import Platform
 from app.utils.text import extract_hashtags
 from app.utils.url_utils import detect_platform
@@ -21,26 +21,6 @@ from app.utils.youtube_web import YouTubeWebMetadata, fetch_youtube_web_metadata
 from app.utils.ytdlp import base_ytdlp_opts
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class RawMetadata:
-    platform: Platform
-    title: str = "Unknown title"
-    creator: str = "Unknown creator"
-    creator_url: str | None = None
-    follower_count: int = 0
-    thumbnail: Optional[str] = None
-    views: int = 0
-    likes: int | None = None
-    comments: int | None = None
-    duration_seconds: int = 0
-    upload_date: Optional[str] = None
-    hashtags: list[str] = field(default_factory=list)
-    description: str = ""
-    # The raw yt-dlp info dict, reused by the transcript service to avoid a
-    # second network round-trip.
-    raw: dict[str, Any] = field(default_factory=dict)
 
 
 def _as_int(value: Any) -> int:
@@ -153,6 +133,14 @@ class MetadataService:
             if web:
                 logger.info("YouTube metadata enriched via web scrape for %s", url)
                 result = _merge_metadata(result, _web_to_raw(web, platform))
+
+        if platform == Platform.youtube and _youtube_needs_web_fallback(result):
+            from app.utils.youtube_api import fetch_youtube_api_metadata
+
+            api_meta = fetch_youtube_api_metadata(url)
+            if api_meta:
+                logger.info("YouTube metadata enriched via Data API for %s", url)
+                result = _merge_metadata(result, api_meta)
 
         if platform == Platform.youtube and _metadata_is_empty(result):
             oembed = self._fetch_youtube_oembed(url)

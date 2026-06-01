@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     instagram_cookies_file: str = Field(default="", alias="INSTAGRAM_COOKIES_FILE")
     cookies_from_browser: str = Field(default="", alias="COOKIES_FROM_BROWSER")
 
+    # Optional YouTube Data API key — reliable views/likes on cloud hosts when
+    # yt-dlp and watch-page scraping are blocked. Free tier: 10k units/day.
+    youtube_api_key: str = Field(default="", alias="YOUTUBE_API_KEY")
+
     # Visual understanding (vision LLM reads scene + on-screen text from frames).
     enable_visual: bool = Field(default=False, alias="ENABLE_VISUAL")
     enable_ocr: bool = Field(default=False, alias="ENABLE_OCR")
