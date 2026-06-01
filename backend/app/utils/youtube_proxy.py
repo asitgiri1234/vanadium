@@ -8,6 +8,7 @@ import httpx
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.utils.youtube_cloud import is_youtube_cloud_host
 
 logger = get_logger(__name__)
 
@@ -19,6 +20,9 @@ def frontend_proxy_base() -> str:
     for origin in settings.cors_origin_list:
         if origin.startswith("https://") and "localhost" not in origin:
             return origin.rstrip("/")
+    # Production fallback when CORS_ORIGINS / FRONTEND_PROXY_URL are unset on Render.
+    if is_youtube_cloud_host():
+        return "https://vanadium-delta.vercel.app"
     return ""
 
 
