@@ -17,6 +17,8 @@ from app.models.raw_metadata import RawMetadata
 from app.models.schemas import Platform
 from app.utils.instagram_embed import fetch_instagram_fallback_metadata
 from app.utils.instagram_profile import fetch_instagram_profile_metadata, _extract_handle
+from app.utils.instagram_page_media import extract_instagram_media_urls
+from app.utils.instagram_reel_proxy import fetch_instagram_reel_proxy, reel_proxy_to_raw
 from app.utils.instagram_proxy import fetch_instagram_profile_proxy
 from app.utils.metadata_display import coalesce_count, followers_known
 from app.utils.text import extract_hashtags
@@ -272,9 +274,24 @@ class MetadataService:
 
     def _fetch_instagram(self, url: str) -> RawMetadata:
         result = RawMetadata(platform=Platform.instagram)
+        media_hints: dict[str, Any] = {}
+
+        if is_youtube_cloud_host():
+            proxy = fetch_instagram_reel_proxy(url)
+            if proxy:
+                result = _merge_metadata(result, reel_proxy_to_raw(proxy))
+                if proxy.get("video_urls"):
+                    media_hints["ig_video_urls"] = proxy.get("video_urls")
+                if proxy.get("thumbnail_urls"):
+                    media_hints["ig_thumbnail_urls"] = proxy.get("thumbnail_urls")
+                if proxy.get("thumbnail_url"):
+                    media_hints["thumbnail_url"] = proxy.get("thumbnail_url")
+
         try:
             ytdlp = self._fetch_with_ytdlp(url, Platform.instagram)
             result = _merge_metadata(result, ytdlp)
+            if isinstance(ytdlp.raw, dict):
+                media_hints.update(ytdlp.raw)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Instagram yt-dlp failed for %s: %s", url, exc)
 
@@ -282,6 +299,25 @@ class MetadataService:
             fallback = fetch_instagram_fallback_metadata(url)
             if fallback:
                 result = _merge_metadata(result, fallback)
+                if fallback.thumbnail:
+                    media_hints["thumbnail_url"] = fallback.thumbnail
+
+        scraped = extract_instagram_media_urls(url)
+        if scraped.get("video_urls"):
+            media_hints.setdefault("ig_video_urls", [])
+            for u in scraped["video_urls"]:
+                if u not in media_hints["ig_video_urls"]:
+                    media_hints["ig_video_urls"].append(u)
+        if scraped.get("thumbnail_urls"):
+            media_hints.setdefault("ig_thumbnail_urls", [])
+            for u in scraped["thumbnail_urls"]:
+                if u not in media_hints["ig_thumbnail_urls"]:
+                    media_hints["ig_thumbnail_urls"].append(u)
+
+        result.raw = {
+            **(result.raw if isinstance(result.raw, dict) else {}),
+            **media_hints,
+        }
 
         if not followers_known(result.follower_count):
             raw_info = result.raw if isinstance(result.raw, dict) else None

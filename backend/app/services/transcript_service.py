@@ -27,12 +27,17 @@ class TranscriptService:
         self._whisper_model = None
         self._whisper_lock = threading.Lock()
 
-    def fetch(self, url: str, platform: Platform) -> list[TranscriptSegment]:
+    def fetch(
+        self,
+        url: str,
+        platform: Platform,
+        ig_media: dict | None = None,
+    ) -> list[TranscriptSegment]:
         try:
             if platform == Platform.youtube:
                 return self._youtube(url)
             if platform == Platform.instagram:
-                return self._instagram(url)
+                return self._instagram(url, ig_media)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Transcript extraction failed for %s: %s", url, exc)
         return []
@@ -180,7 +185,9 @@ class TranscriptService:
 
         return _parse_vtt(text)
 
-    def _instagram(self, url: str) -> list[TranscriptSegment]:
+    def _instagram(
+        self, url: str, ig_media: dict | None = None
+    ) -> list[TranscriptSegment]:
         backend = self.resolve_whisper_backend()
         if not backend:
             logger.info(
@@ -188,7 +195,7 @@ class TranscriptService:
             )
             return []
 
-        audio_path = self._download_audio(url)
+        audio_path = self._download_audio(url, ig_media)
         if not audio_path:
             return []
 
@@ -209,7 +216,7 @@ class TranscriptService:
                         pass
 
     @staticmethod
-    def _download_audio(url: str) -> str | None:
+    def _download_audio(url: str, ig_media: dict | None = None) -> str | None:
         from yt_dlp import YoutubeDL
 
         from app.utils.instagram_media import download_instagram_audio
@@ -221,14 +228,15 @@ class TranscriptService:
             with YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 path = ydl.prepare_filename(info)
-            if os.path.exists(path):
+            if os.path.exists(path) and os.path.getsize(path) > 1000:
                 return path
         except Exception as exc:  # noqa: BLE001
             logger.warning("IG audio download (yt-dlp) failed for %s: %s", url, exc)
 
-        direct_path = os.path.join(tmp_dir, "audio.m4a")
-        if download_instagram_audio(url, direct_path):
-            return direct_path
+        for ext in ("mp4", "m4a", "webm"):
+            direct_path = os.path.join(tmp_dir, f"media.{ext}")
+            if download_instagram_audio(url, direct_path, ig_media=ig_media):
+                return direct_path
         return None
 
     @staticmethod

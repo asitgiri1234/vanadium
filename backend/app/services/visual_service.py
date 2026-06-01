@@ -34,7 +34,14 @@ _VISION_FRAME_CAP = 3
 
 
 class VisualService:
-    def extract(self, url: str, platform: Platform) -> tuple[list[VisualFrame], str, str]:
+    def extract(
+        self,
+        url: str,
+        platform: Platform,
+        *,
+        fallback_thumbnail: str | None = None,
+        ig_media: dict | None = None,
+    ) -> tuple[list[VisualFrame], str, str]:
         """Return (ocr frames, scene summary, on-screen text from vision)."""
         if not settings.enable_visual:
             return [], "", ""
@@ -47,7 +54,9 @@ class VisualService:
                 frame_paths = self._youtube_thumbnail_frames(url, work_dir)
 
             if platform == Platform.instagram and is_youtube_cloud_host():
-                frame_paths = self._instagram_thumbnail_frames(url, work_dir)
+                frame_paths = self._instagram_thumbnail_frames(
+                    url, work_dir, fallback_thumbnail, ig_media
+                )
 
             if not frame_paths:
                 video_path = self._download_video(url, work_dir)
@@ -58,7 +67,9 @@ class VisualService:
                 frame_paths = self._youtube_thumbnail_frames(url, work_dir)
 
             if not frame_paths and platform == Platform.instagram:
-                frame_paths = self._instagram_thumbnail_frames(url, work_dir)
+                frame_paths = self._instagram_thumbnail_frames(
+                    url, work_dir, fallback_thumbnail, ig_media
+                )
 
             if not frame_paths:
                 return [], "", ""
@@ -100,11 +111,21 @@ class VisualService:
         return [(i * interval, path) for i, path in enumerate(paths)]
 
     def _instagram_thumbnail_frames(
-        self, url: str, work_dir: str
+        self,
+        url: str,
+        work_dir: str,
+        fallback_thumbnail: str | None = None,
+        ig_media: dict | None = None,
     ) -> list[tuple[float, str]]:
         """Cloud-safe Instagram frames via CDN thumbnail URLs."""
         max_frames = max(1, settings.visual_max_frames)
-        paths = download_instagram_thumbnails(url, work_dir, max_frames=max_frames)
+        paths = download_instagram_thumbnails(
+            url,
+            work_dir,
+            max_frames=max_frames,
+            ig_media=ig_media,
+            fallback_thumbnail=fallback_thumbnail,
+        )
         if not paths:
             return []
         interval = 1.0

@@ -96,7 +96,7 @@ function TranscriptBody({
       note = "Enable Whisper (ENABLE_WHISPER=true) to transcribe Instagram reels.";
     } else if (isInstagram && whisperEnabled) {
       note =
-        "No speech detected — this reel may be music-only or have no voiceover.";
+        "Audio could not be transcribed. Reel download may be blocked, or the clip has little speech. Re-analyze after deploy.";
     } else {
       note = "No captions/transcript are available for this video.";
     }

@@ -123,7 +123,8 @@ class IngestionService:
         platform = detect_platform(url)
 
         raw = metadata_service.fetch(url)
-        segments = transcript_service.fetch(url, platform)
+        ig_media = raw.raw if isinstance(raw.raw, dict) else None
+        segments = transcript_service.fetch(url, platform, ig_media=ig_media)
 
         duration = raw.duration_seconds
         if duration == 0 and segments:
@@ -137,7 +138,11 @@ class IngestionService:
             embeddings = embedding_service.embed_documents([c.text for c in chunks])
             chroma_store.upsert_chunks(chunks, embeddings)
 
-        visual = self._build_visual(analysis_id, slot, url, platform)
+        visual = self._build_visual(
+            analysis_id, slot, url, platform,
+            fallback_thumbnail=raw.thumbnail,
+            ig_media=ig_media,
+        )
 
         metadata = VideoMetadata(
             video_id=slot,
@@ -170,11 +175,19 @@ class IngestionService:
         slot: VideoSlot,
         url: str,
         platform: Platform,
+        *,
+        fallback_thumbnail: str | None = None,
+        ig_media: dict | None = None,
     ) -> VideoVisual:
         if not settings.enable_visual:
             return VideoVisual(video_id=slot, platform=platform, available=False)
 
-        frames, summary, on_screen = visual_service.extract(url, platform)
+        frames, summary, on_screen = visual_service.extract(
+            url,
+            platform,
+            fallback_thumbnail=fallback_thumbnail,
+            ig_media=ig_media,
+        )
         available = bool(frames or summary or on_screen)
 
         if available:
