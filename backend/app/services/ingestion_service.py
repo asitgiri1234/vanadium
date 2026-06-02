@@ -124,7 +124,23 @@ class IngestionService:
 
         raw = metadata_service.fetch(url)
         ig_media = raw.raw if isinstance(raw.raw, dict) else None
-        segments = transcript_service.fetch(url, platform, ig_media=ig_media)
+        # Transcript extraction and visual extraction are independent once metadata is loaded.
+        # Run them in parallel to cut end-to-end ingest latency.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            fut_segments = pool.submit(
+                transcript_service.fetch, url, platform, ig_media=ig_media
+            )
+            fut_visual = pool.submit(
+                self._build_visual,
+                analysis_id,
+                slot,
+                url,
+                platform,
+                fallback_thumbnail=raw.thumbnail,
+                ig_media=ig_media,
+            )
+            segments = fut_segments.result()
+            visual = fut_visual.result()
 
         duration = raw.duration_seconds
         if duration == 0 and segments:
@@ -137,12 +153,6 @@ class IngestionService:
         if chunks:
             embeddings = embedding_service.embed_documents([c.text for c in chunks])
             chroma_store.upsert_chunks(chunks, embeddings)
-
-        visual = self._build_visual(
-            analysis_id, slot, url, platform,
-            fallback_thumbnail=raw.thumbnail,
-            ig_media=ig_media,
-        )
 
         metadata = VideoMetadata(
             video_id=slot,

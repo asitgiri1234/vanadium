@@ -117,13 +117,11 @@ def _get_cached_dataset(url: str) -> list[dict[str, Any]]:
     if cached and now - cached[0] < _CACHE_TTL_SEC:
         return cached[1]
 
+    # Fast path: posts-only fetch is enough for likes/comments/views + caption transcript.
+    # A second comments scrape adds noticeable latency and is not required for ingest.
     posts = _run_sync_dataset(url, results_type="posts", results_limit=1)
-    comments = _run_sync_dataset(url, results_type="comments", results_limit=50)
-    combined = posts + [
-        c for c in comments if isinstance(c, dict) and c not in posts
-    ]
-    _dataset_cache[key] = (now, combined)
-    return combined
+    _dataset_cache[key] = (now, posts)
+    return posts
 
 
 def _is_comment_row(item: dict[str, Any]) -> bool:

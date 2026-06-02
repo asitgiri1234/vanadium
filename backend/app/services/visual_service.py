@@ -30,7 +30,7 @@ from app.utils.ytdlp import base_ytdlp_opts
 logger = get_logger(__name__)
 
 # Max frames sent to the vision model (latency/cost control).
-_VISION_FRAME_CAP = 3
+_VISION_FRAME_CAP = 2
 
 
 class VisualService:
