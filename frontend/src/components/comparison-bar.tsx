@@ -150,16 +150,31 @@ export function ComparisonBar({
   );
 }
 
-/** Fixed 0–100% scale: bar width = engagement rate, never relative to the other video. */
+/**
+ * Normalises an engagement_rate value to a 0–100 percentage for display.
+ * The raw value may be stored as a decimal fraction (e.g. 0.045 = 4.5%)
+ * or already as a percentage (e.g. 4.5). Values ≤ 1 are treated as fractions
+ * and multiplied by 100; values > 1 are used as-is.
+ */
+function normaliseRate(rate: number): number {
+  if (!Number.isFinite(rate)) return NaN;
+  // Treat values in (0, 1] as fractional — convert to percentage points.
+  // Values already > 1 are assumed to already be in percentage form.
+  return rate > 0 && rate <= 1 ? rate * 100 : rate;
+}
+
+/** Maps a normalised 0–100 engagement rate to a CSS width string against the fixed scale. */
 function engagementBarWidth(rate: number): string {
-  if (!Number.isFinite(rate)) return "0%";
-  const clamped = Math.min(100, Math.max(0, rate));
+  const normalised = normaliseRate(rate);
+  if (!Number.isFinite(normalised)) return "0%";
+  const clamped = Math.min(100, Math.max(0, normalised));
   return `${clamped}%`;
 }
 
 function formatEngagementLabel(rate: number): string {
-  if (!Number.isFinite(rate)) return "N/A";
-  const clamped = Math.min(100, Math.max(0, rate));
+  const normalised = normaliseRate(rate);
+  if (!Number.isFinite(normalised)) return "N/A";
+  const clamped = Math.min(100, Math.max(0, normalised));
   return clamped % 1 === 0 ? `${clamped.toFixed(0)}%` : `${clamped.toFixed(2)}%`;
 }
 
@@ -200,7 +215,8 @@ function Bar({
   accent: string;
   glow: "violet" | "cyan";
 }) {
-  const rateKnown = Number.isFinite(engagementRate);
+  const normalised = normaliseRate(engagementRate);
+  const rateKnown = Number.isFinite(normalised);
   const width = engagementBarWidth(engagementRate);
   const labelText = rateKnown ? formatEngagementLabel(engagementRate) : "N/A";
   const showBar = rateKnown && viewsKnown;
@@ -235,7 +251,7 @@ function Bar({
             showBar && glowClass,
           )}
           style={{ width: showBar ? width : "0%" }}
-          aria-valuenow={rateKnown ? Math.round(engagementRate * 100) / 100 : undefined}
+          aria-valuenow={rateKnown ? Math.round(normalised * 100) / 100 : undefined}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-label={`${label} engagement ${labelText}`}
