@@ -104,6 +104,17 @@ class IngestionService:
         logger.info("Ingest %s complete (ai_pending=%s)", analysis_id, comparison.ai_pending)
 
         if settings.llm_configured:
+            # Core analysis is ready; strategist runs in background (ComparisonBar polls ai_pending).
+            self._progress(
+                progress_cb,
+                "done",
+                {
+                    "status": "done",
+                    "comparison_complete": True,
+                    "stage_message": "Analysis ready",
+                    "strategist_complete": False,
+                },
+            )
             self._progress(
                 progress_cb,
                 "strategist",
@@ -160,7 +171,7 @@ class IngestionService:
             logger.info("Strategist Summary: %.2fs", time.perf_counter() - t_llm)
             self._progress(
                 progress_cb,
-                "done",
+                "strategist",
                 {
                     "status": "done",
                     "stage_message": "Advanced AI Strategist Analysis Ready",
@@ -178,11 +189,11 @@ class IngestionService:
             )
             self._progress(
                 progress_cb,
-                "error",
+                "strategist",
                 {
-                    "status": "error",
-                    "error": str(exc)[:300],
-                    "stage_message": "Strategist summary failed",
+                    "status": "done",
+                    "strategist_complete": True,
+                    "stage_message": "Strategist summary unavailable",
                 },
             )
 

@@ -146,6 +146,21 @@ export async function startIngest(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ video_a_url: videoAUrl, video_b_url: videoBUrl }),
   });
+  if (res.status === 404) {
+    // Older backend without progressive ingest — fall back to blocking ingest.
+    const snapshot = await ingest(videoAUrl, videoBUrl);
+    return {
+      analysis_id: snapshot.analysis_id,
+      status: "done",
+      stage: "done",
+      stage_message: "Analysis ready",
+      metadata_complete: true,
+      transcript_complete: true,
+      embeddings_complete: true,
+      comparison_complete: true,
+      strategist_complete: !snapshot.comparison.ai_pending,
+    };
+  }
   return jsonOrThrow<AnalysisProgress>(res);
 }
 
