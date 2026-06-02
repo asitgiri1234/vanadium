@@ -47,9 +47,9 @@ export function ComparisonBar({
     };
   }, [analysisId, comparison.ai_pending]);
 
-  const max = Math.max(videoA.engagement_rate, videoB.engagement_rate, 0.01);
-  const widthA = `${(videoA.engagement_rate / max) * 100}%`;
-  const widthB = `${(videoB.engagement_rate / max) * 100}%`;
+  // Use absolute percentage scale (0-100), not winner-normalized width.
+  const widthA = `${Math.max(0, Math.min(100, videoA.engagement_rate))}%`;
+  const widthB = `${Math.max(0, Math.min(100, videoB.engagement_rate))}%`;
   const performanceWinner = determinePerformanceWinner(videoA, videoB);
 
   return (
