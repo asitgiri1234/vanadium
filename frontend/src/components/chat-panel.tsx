@@ -121,14 +121,16 @@ export function ChatPanel({
         {messages.length === 0 ? (
           <EmptyState suggestions={suggestions} onPick={send} />
         ) : (
-          <>
-            {messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)}
-            <SuggestionRow suggestions={suggestions} onPick={send} />
-          </>
+          messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)
         )}
       </CardContent>
 
       <div className="border-t border-border/50 bg-muted/10 p-4 backdrop-blur-md">
+        {messages.length > 0 && (
+          <div className="mb-3">
+            <SuggestionRow suggestions={suggestions} onPick={send} />
+          </div>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -193,7 +195,7 @@ function SuggestionRow({
   onPick: (q: string) => void;
 }) {
   return (
-    <div className="mt-2 border-t border-border/40 pt-4">
+    <div>
       <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
         Try next
       </p>
