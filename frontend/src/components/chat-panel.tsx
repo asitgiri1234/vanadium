@@ -121,7 +121,10 @@ export function ChatPanel({
         {messages.length === 0 ? (
           <EmptyState suggestions={suggestions} onPick={send} />
         ) : (
-          messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)
+          <>
+            {messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)}
+            <SuggestionRow suggestions={suggestions} onPick={send} />
+          </>
         )}
       </CardContent>
 
@@ -174,6 +177,29 @@ function EmptyState({
       <div className="flex max-w-lg flex-wrap justify-center gap-2">
         {suggestions.map((s) => (
           <button key={s} onClick={() => onPick(s)} className="suggestion-chip">
+            {s}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SuggestionRow({
+  suggestions,
+  onPick,
+}: {
+  suggestions: string[];
+  onPick: (q: string) => void;
+}) {
+  return (
+    <div className="mt-2 border-t border-border/40 pt-4">
+      <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        Try next
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {suggestions.map((s) => (
+          <button key={`inline-${s}`} onClick={() => onPick(s)} className="suggestion-chip">
             {s}
           </button>
         ))}
