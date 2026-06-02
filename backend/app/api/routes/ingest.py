@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+import threading
+import uuid
+
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.schemas import (
+    AnalysisProgress,
     AnalysisSnapshot,
+    ComparisonInsights,
     IngestRequest,
+    Platform,
     TranscriptLine,
     TranscriptResponse,
+    VideoMetadata,
     VideoTranscript,
     VideoVisual,
     VisualResponse,
@@ -22,6 +29,45 @@ from app.utils.text import format_timestamp
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["ingest"])
+_ingest_threads: dict[str, threading.Thread] = {}
+
+
+def _placeholder_video(slot: str, url: str) -> VideoMetadata:
+    platform = Platform.youtube if "youtu" in url.lower() else (
+        Platform.instagram if "instagram" in url.lower() else Platform.unknown
+    )
+    return VideoMetadata(
+        video_id=slot,  # type: ignore[arg-type]
+        platform=platform,
+        url=url,
+    )
+
+
+def _start_ingest_background(payload: IngestRequest, analysis_id: str) -> None:
+    def progress(stage: str, patch: dict) -> None:
+        analysis_store.update_progress(analysis_id, stage=stage, **patch)
+
+    def run() -> None:
+        try:
+            ingestion_service.ingest(
+                payload.video_a_url,
+                payload.video_b_url,
+                analysis_id=analysis_id,
+                progress_cb=progress,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Background ingest failed for %s", analysis_id)
+            analysis_store.update_progress(
+                analysis_id,
+                status="error",
+                stage="error",
+                stage_message="Analysis failed",
+                error=str(exc)[:300],
+            )
+
+    thread = threading.Thread(target=run, daemon=True)
+    _ingest_threads[analysis_id] = thread
+    thread.start()
 
 
 @router.post("/ingest", response_model=AnalysisSnapshot)
@@ -38,12 +84,43 @@ async def ingest(payload: IngestRequest) -> AnalysisSnapshot:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {exc}") from exc
 
 
+@router.post("/ingest/start", response_model=AnalysisProgress)
+async def ingest_start(payload: IngestRequest) -> AnalysisProgress:
+    analysis_id = uuid.uuid4().hex[:10]
+    snapshot = AnalysisSnapshot(
+        analysis_id=analysis_id,
+        videos={
+            "A": _placeholder_video("A", payload.video_a_url),
+            "B": _placeholder_video("B", payload.video_b_url),
+        },
+        comparison=ComparisonInsights(ai_pending=True),
+    )
+    analysis_store.save(snapshot)
+    progress = AnalysisProgress(
+        analysis_id=analysis_id,
+        status="running",
+        stage="metadata",
+        stage_message="Fetching Metadata...",
+    )
+    analysis_store.set_progress(progress)
+    _start_ingest_background(payload, analysis_id)
+    return progress
+
+
 @router.get("/analysis/{analysis_id}", response_model=AnalysisSnapshot)
 async def get_analysis(analysis_id: str) -> AnalysisSnapshot:
     snapshot = analysis_store.get(analysis_id)
     if snapshot is None:
         raise HTTPException(status_code=404, detail="Analysis not found")
     return snapshot
+
+
+@router.get("/analysis/{analysis_id}/progress", response_model=AnalysisProgress)
+async def get_analysis_progress(analysis_id: str) -> AnalysisProgress:
+    progress = analysis_store.get_progress(analysis_id)
+    if progress is None:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    return progress
 
 
 @router.get("/analysis/{analysis_id}/transcript", response_model=TranscriptResponse)

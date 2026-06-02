@@ -209,3 +209,16 @@ class ChatTurn(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+
+class AnalysisProgress(BaseModel):
+    analysis_id: str
+    status: Literal["running", "done", "error"] = "running"
+    stage: str = "queued"
+    stage_message: str = "Queued"
+    metadata_complete: bool = False
+    transcript_complete: bool = False
+    embeddings_complete: bool = False
+    comparison_complete: bool = False
+    strategist_complete: bool = False
+    error: str = ""

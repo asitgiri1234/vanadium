@@ -41,6 +41,19 @@ export interface AnalysisSnapshot {
   comparison: ComparisonInsights;
 }
 
+export interface AnalysisProgress {
+  analysis_id: string;
+  status: "running" | "done" | "error";
+  stage: string;
+  stage_message: string;
+  metadata_complete: boolean;
+  transcript_complete: boolean;
+  embeddings_complete: boolean;
+  comparison_complete: boolean;
+  strategist_complete: boolean;
+  error: string;
+}
+
 export interface Citation {
   video_id: VideoSlot;
   chunk_index: number;

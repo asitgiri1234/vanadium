@@ -1,5 +1,6 @@
 import type {
   AnalysisSnapshot,
+  AnalysisProgress,
   Citation,
   TranscriptResponse,
   VisualResponse,
@@ -136,8 +137,24 @@ export async function ingest(
   return jsonOrThrow<AnalysisSnapshot>(res);
 }
 
+export async function startIngest(
+  videoAUrl: string,
+  videoBUrl: string,
+): Promise<AnalysisProgress> {
+  const res = await apiFetch("/api/ingest/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ video_a_url: videoAUrl, video_b_url: videoBUrl }),
+  });
+  return jsonOrThrow<AnalysisProgress>(res);
+}
+
 export async function getAnalysis(id: string): Promise<AnalysisSnapshot> {
   return jsonOrThrow<AnalysisSnapshot>(await apiFetch(`/api/analysis/${id}`));
+}
+
+export async function getAnalysisProgress(id: string): Promise<AnalysisProgress> {
+  return jsonOrThrow<AnalysisProgress>(await apiFetch(`/api/analysis/${id}/progress`));
 }
 
 export async function getTranscript(id: string): Promise<TranscriptResponse> {

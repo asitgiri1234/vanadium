@@ -9,11 +9,12 @@ import { VisualPanel } from "@/components/visual-panel";
 import { ComparisonBar } from "@/components/comparison-bar";
 import { ChatPanel } from "@/components/chat-panel";
 import { SectionLabel, SiteFooter, SiteHeader } from "@/components/landing";
-import { ingest } from "@/lib/api";
-import type { AnalysisSnapshot } from "@/lib/types";
+import { getAnalysis, getAnalysisProgress, startIngest } from "@/lib/api";
+import type { AnalysisProgress, AnalysisSnapshot } from "@/lib/types";
 
 export default function AnalyzePage() {
   const [snapshot, setSnapshot] = useState<AnalysisSnapshot | null>(null);
+  const [progress, setProgress] = useState<AnalysisProgress | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,9 +22,34 @@ export default function AnalyzePage() {
     setLoading(true);
     setError(null);
     setSnapshot(null);
+    setProgress(null);
     try {
-      const result = await ingest(a, b);
-      setSnapshot(result);
+      const started = await startIngest(a, b);
+      setProgress(started);
+      setSnapshot(await getAnalysis(started.analysis_id));
+
+      const poll = async () => {
+        const [p, s] = await Promise.all([
+          getAnalysisProgress(started.analysis_id),
+          getAnalysis(started.analysis_id),
+        ]);
+        setProgress(p);
+        setSnapshot(s);
+        if (p.status === "error") {
+          throw new Error(p.error || "Analysis failed.");
+        }
+        return p.status === "done";
+      };
+
+      let done = false;
+      while (!done) {
+        // eslint-disable-next-line no-await-in-loop
+        done = await poll();
+        if (!done) {
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((r) => setTimeout(r, 1200));
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ingestion failed.");
     } finally {
@@ -86,6 +112,20 @@ export default function AnalyzePage() {
             <p className="text-sm text-muted-foreground">
               Transcription and visual analysis can take up to 30 seconds. Hang tight.
             </p>
+          </div>
+        )}
+
+        {loading && progress && (
+          <div className="empty-state-panel mt-6 text-left">
+            <p className="sci-fi-label mb-3">Analysis Progress</p>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>{progress.metadata_complete ? "✓" : "…"} Fetching Metadata</li>
+              <li>{progress.transcript_complete ? "✓" : "…"} Extracting Transcript</li>
+              <li>{progress.embeddings_complete ? "✓" : "…"} Generating Embeddings</li>
+              <li>{progress.comparison_complete ? "✓" : "…"} Building Analysis</li>
+              <li>{progress.strategist_complete ? "✓" : "…"} Strategist Summary</li>
+            </ul>
+            <p className="mt-3 font-mono text-xs text-accent">{progress.stage_message}</p>
           </div>
         )}
 

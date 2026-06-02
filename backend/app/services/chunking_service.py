@@ -26,6 +26,8 @@ class ChunkingService:
     def __init__(self, chunk_size: int | None = None, overlap: int | None = None):
         self.chunk_size = chunk_size or settings.chunk_size
         self.overlap = overlap or settings.chunk_overlap
+        # Keep overlap around 10-15% of chunk size to reduce duplicate embeddings
+        # while maintaining semantic continuity across chunk boundaries.
 
     def chunk(
         self,

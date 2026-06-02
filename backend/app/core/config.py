@@ -49,8 +49,11 @@ class Settings(BaseSettings):
     )
 
     # Chunking
-    chunk_size: int = Field(default=600, alias="CHUNK_SIZE")
-    chunk_overlap: int = Field(default=100, alias="CHUNK_OVERLAP")
+    # Defaults tuned for lower latency while preserving retrieval quality:
+    # - 900 chars keeps enough context per chunk for strategy questions.
+    # - 120 overlap (~13%) preserves continuity without excessive duplication.
+    chunk_size: int = Field(default=900, alias="CHUNK_SIZE")
+    chunk_overlap: int = Field(default=120, alias="CHUNK_OVERLAP")
 
     # Retrieval / memory
     retrieval_top_k: int = Field(default=4, alias="RETRIEVAL_TOP_K")

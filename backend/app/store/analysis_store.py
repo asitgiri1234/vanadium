@@ -15,6 +15,7 @@ from typing import Any
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.schemas import (
+    AnalysisProgress,
     AnalysisSnapshot,
     ChatTurn,
     ComparisonInsights,
@@ -33,6 +34,7 @@ class AnalysisStore:
         self._memory: dict[str, list[ChatTurn]] = {}
         self._transcripts: dict[str, dict[VideoSlot, list[TranscriptSegment]]] = {}
         self._visuals: dict[str, dict[VideoSlot, VideoVisual]] = {}
+        self._progress: dict[str, AnalysisProgress] = {}
         self._max_turns = max_turns or settings.memory_max_turns
         self._persist_dir = Path(settings.analysis_persist_dir)
         self._persist_dir.mkdir(parents=True, exist_ok=True)
@@ -70,6 +72,22 @@ class AnalysisStore:
             if analysis_id in self._snapshots:
                 return True
             return self._path(analysis_id).is_file()
+
+    # --- progress --- #
+    def set_progress(self, progress: AnalysisProgress) -> None:
+        with self._lock:
+            self._progress[progress.analysis_id] = progress
+
+    def update_progress(self, analysis_id: str, **patch: Any) -> None:
+        with self._lock:
+            current = self._progress.get(analysis_id) or AnalysisProgress(
+                analysis_id=analysis_id
+            )
+            self._progress[analysis_id] = current.model_copy(update=patch)
+
+    def get_progress(self, analysis_id: str) -> AnalysisProgress | None:
+        with self._lock:
+            return self._progress.get(analysis_id)
 
     # --- transcripts --- #
     def save_transcripts(
