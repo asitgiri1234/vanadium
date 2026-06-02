@@ -47,9 +47,6 @@ export function ComparisonBar({
     };
   }, [analysisId, comparison.ai_pending]);
 
-  // Use absolute percentage scale (0-100), not winner-normalized width.
-  const widthA = `${Math.max(0, Math.min(100, videoA.engagement_rate))}%`;
-  const widthB = `${Math.max(0, Math.min(100, videoB.engagement_rate))}%`;
   const performanceWinner = determinePerformanceWinner(videoA, videoB);
 
   return (
@@ -72,19 +69,18 @@ export function ComparisonBar({
       </CardHeader>
       <CardContent className="space-y-6 pt-5">
         <div className="space-y-5">
+          <EngagementScale />
           <Bar
             label="Video A"
-            value={videoA.engagement_rate}
-            width={widthA}
-            hasViews={videoA.views > 0}
+            engagementRate={videoA.engagement_rate}
+            viewsKnown={videoA.views > 0}
             accent="from-violet-500 via-violet-400 to-fuchsia-400"
             glow="violet"
           />
           <Bar
             label="Video B"
-            value={videoB.engagement_rate}
-            width={widthB}
-            hasViews={videoB.views > 0}
+            engagementRate={videoB.engagement_rate}
+            viewsKnown={videoB.views > 0}
             accent="from-cyan-500 via-cyan-400 to-teal-400"
             glow="cyan"
           />
@@ -154,21 +150,61 @@ export function ComparisonBar({
   );
 }
 
+/** Fixed 0–100% scale: bar width = engagement rate, never relative to the other video. */
+function engagementBarWidth(rate: number): string {
+  if (!Number.isFinite(rate)) return "0%";
+  const clamped = Math.min(100, Math.max(0, rate));
+  return `${clamped}%`;
+}
+
+function formatEngagementLabel(rate: number): string {
+  if (!Number.isFinite(rate)) return "N/A";
+  const clamped = Math.min(100, Math.max(0, rate));
+  return clamped % 1 === 0 ? `${clamped.toFixed(0)}%` : `${clamped.toFixed(2)}%`;
+}
+
+const SCALE_TICKS = [0, 25, 50, 75, 100] as const;
+
+function EngagementScale() {
+  return (
+    <div className="relative mb-1 w-full pt-0.5">
+      <div className="absolute inset-x-0 top-0 flex justify-between font-mono text-[9px] uppercase tracking-wider text-muted-foreground/55">
+        {SCALE_TICKS.map((tick) => (
+          <span
+            key={tick}
+            className={cn(
+              "tabular-nums",
+              tick === 0 && "translate-x-0",
+              tick === 100 && "-translate-x-full",
+              tick !== 0 && tick !== 100 && "-translate-x-1/2",
+            )}
+          >
+            {tick}%
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Bar({
   label,
-  value,
-  width,
-  hasViews,
+  engagementRate,
+  viewsKnown,
   accent,
   glow,
 }: {
   label: string;
-  value: number;
-  width: string;
-  hasViews: boolean;
+  engagementRate: number;
+  viewsKnown: boolean;
   accent: string;
   glow: "violet" | "cyan";
 }) {
+  const rateKnown = Number.isFinite(engagementRate);
+  const width = engagementBarWidth(engagementRate);
+  const labelText = rateKnown ? formatEngagementLabel(engagementRate) : "N/A";
+  const showBar = rateKnown && viewsKnown;
+
   const glowClass =
     glow === "violet"
       ? "shadow-[0_0_20px_hsl(276_91%_66%/0.5)]"
@@ -178,14 +214,31 @@ function Bar({
     <div>
       <div className="mb-2 flex justify-between font-mono text-xs">
         <span className="font-semibold tracking-wide text-foreground/90">{label}</span>
-        <span className={cn(hasViews ? "text-gradient font-bold" : "text-muted-foreground")}>
-          {hasViews ? `${value}%` : "N/A"}
+        <span
+          className={cn(
+            rateKnown && viewsKnown ? "text-gradient font-bold" : "text-muted-foreground",
+          )}
+          title={
+            rateKnown
+              ? `Engagement rate: ${labelText} (0–100% scale)`
+              : "Engagement unavailable"
+          }
+        >
+          {labelText}
         </span>
       </div>
-      <div className="bar-track">
+      <div className="bar-track relative">
         <div
-          className={cn("bar-fill bg-gradient-to-r", accent, hasViews && glowClass)}
-          style={{ width: hasViews ? width : "0%" }}
+          className={cn(
+            "bar-fill bg-gradient-to-r transition-[width] duration-700 ease-out",
+            accent,
+            showBar && glowClass,
+          )}
+          style={{ width: showBar ? width : "0%" }}
+          aria-valuenow={rateKnown ? Math.round(engagementRate * 100) / 100 : undefined}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`${label} engagement ${labelText}`}
         />
       </div>
     </div>
